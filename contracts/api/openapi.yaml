@@ -14,6 +14,7 @@ servers:
 security:
   - pairingToken: []
 tags:
+  - name: extension
   - name: capture
   - name: screening
   - name: shortlist
@@ -69,11 +70,15 @@ components:
             - RESUME_UNSUPPORTED_CLAIM
             - WORKFLOW_NOT_APPROVABLE
             - BUDGET_EXCEEDED
+            - PAYLOAD_INVALID
+            - CAPTURE_NOT_FOUND
+            - EXTENSION_OFFLINE
         message: { type: string }
         trace_id: { type: string }
         details: { type: object }
     BatchRun:
       type: object
+      required: [id, source, kind, status, stats, risk_halted, trigger]
       properties:
         id: { type: string, format: uuid }
         source: { type: string, enum: [boss] }
@@ -81,6 +86,54 @@ components:
         status: { type: string, enum: [queued, running, completed, aborted, risk_halted, failed] }
         stats: { type: object }
         risk_halted: { type: boolean }
+        trigger: { type: string, enum: [console, extension, manual] }
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+    CaptureCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, delay_ms]
+      properties:
+        kind: { type: string, enum: [list, detail] }
+        query_url: { type: [string, 'null'], format: uri }
+        list_params: { type: [object, 'null'] }
+        max_items: { type: integer, minimum: 1, maximum: 500, default: 30 }
+        ext_ids:
+          type: [array, 'null']
+          minItems: 1
+          items: { type: string, minLength: 1 }
+        detail_limit: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        delay_ms: { type: integer, minimum: 1800 }
+    ExtensionStatus:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [paired]
+          properties: { paired: { const: false } }
+        - type: object
+          additionalProperties: false
+          required: [paired, instance_id, extension_version, protocol_version, connected_at]
+          properties:
+            paired: { const: true }
+            instance_id: { type: string, format: uuid }
+            extension_version: { type: string }
+            protocol_version: { type: integer }
+            connected_at: { type: string, format: date-time }
+    RawJobSummary:
+      type: object
+      required: [id, ext_id]
+      properties:
+        id: { type: string, format: uuid }
+        ext_id: { type: string }
+        title: { type: [string, 'null'] }
+        company: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        salary_text: { type: [string, 'null'] }
+        exp_text: { type: [string, 'null'] }
+        degree: { type: [string, 'null'] }
+        list_at: { type: [string, 'null'], format: date-time }
+        detail_at: { type: [string, 'null'], format: date-time }
+        batch_id: { type: [string, 'null'], format: uuid }
     ScreenResult:
       type: object
       properties:
@@ -161,11 +214,28 @@ components:
         source: { type: string, enum: [builtin, docx_import, user_copy] }
         quality_grade: { type: string, enum: [A, B, C] }
 paths:
+  /extension/status:
+    get:
+      tags: [extension]
+      summary: 已鉴权控制台读取当前扩展连接状态；不返回配对令牌
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExtensionStatus' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /captures:
     post:
       tags: [capture]
       summary: 创建采集批次（人工触发；服务端下发 WS 命令给扩展）
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CaptureCreate' }
       responses:
         '202':
           description: 已排队
@@ -178,6 +248,17 @@ paths:
       summary: 批次列表
       responses:
         '200': { description: ok }
+  /captures/{id}:
+    get:
+      tags: [capture]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchRun' }
+        '404': { $ref: '#/components/responses/Error' }
   /captures/{id}/abort:
     post:
       tags: [capture]
@@ -190,7 +271,17 @@ paths:
       tags: [capture]
       summary: 岗位池（cursor 分页，不含聊天/证据原文）
       responses:
-        '200': { description: ok }
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, limit, offset]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/RawJobSummary' } }
+                  limit: { type: integer }
+                  offset: { type: integer }
   /filter-sets:
     post:
       tags: [screening]

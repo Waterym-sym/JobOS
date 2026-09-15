@@ -39,6 +39,7 @@ services:
       WS_PORT: ${WS_PORT:-8788}
       CAPTURE_MIN_DELAY_MS: ${CAPTURE_MIN_DELAY_MS:-1800}
       CAPTURE_CONCURRENCY: "1"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jobos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-jobos}
       CHAT_TO_THIRD_PARTY: "false"
       CONTAINER_MODE: "true"
       PAIRING_TOKEN_FILE: /workspace/config/.local/pairing.token
@@ -95,6 +96,9 @@ services:
       - "${HOST_BIND:-127.0.0.1}:4173:4173"
     environment:
       API_UPSTREAM: http://api:8000
+      PAIRING_TOKEN_FILE: /workspace/config/.local/pairing.token
+    volumes:
+      - ./data/config:/workspace/config/.local:ro
     depends_on:
       api:
         condition: service_healthy

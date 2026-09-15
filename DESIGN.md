@@ -1,6 +1,6 @@
 # JobOS DESIGN.md — 视觉与交互真相（唯一真源）
 
-> 版本 v0.2 · 2026-09-15 · 状态：草案待本人最终拍板
+> 版本 v1.0 · 2026-09-15 · 状态：**已定稿**（决策：三套主题全采纳，可切换；`desk` 为默认品牌主题。定稿依据：[design-direction-preview.html](docs/design/design-direction-preview.html) 三方向实测对比）
 > 本文件是 JobOS 控制台（`apps/web`）唯一视觉真源。任何页面/组件实现以本文件为准；参考产品模式见 [docs/design/references/](docs/design/references/README.md)；页面地图与业务口径见 [01 篇](docs/architecture/01-系统设计文档.md)；AI 编码行为边界见 [AGENTS.md](AGENTS.md)。
 >
 > 代理（人/AI）开发任意前端任务前检索链：**架构索引 → 本文件 →（按需）[参考库](docs/design/references/README.md) → taste skill（anti-slop 检查）→ AGENTS.md 红线**。
@@ -12,10 +12,10 @@
 
 | 参考 | 取其模式 | 明确不取 |
 |---|---|---|
-| [Linear](docs/design/references/linear.md) | 发丝线表面阶梯（不靠阴影）、单一稀缺强调色、紧凑几何（8px 按钮/12px 卡）、状态行、等宽状态文本、键盘优先 | 暗色营销画布、薰衣草蓝品牌色、负字距大标题 |
+| [Linear](docs/design/references/linear.md) | 发丝线表面阶梯（不靠阴影）、单一稀缺强调色、紧凑几何（8px 按钮/12px 卡）、状态行、等宽状态文本、键盘优先 | 暗色营销画布、负字距大标题（薰衣草靛蓝 #5E6AD2 由 `minimal` 主题采纳） |
 | [Notion](docs/design/references/notion.md) | 矩形而非胶囊按钮、软标签 chip（分类/规则标签）、发丝线表格行、文档式表面、行内编辑/斜杠菜单语感 | 紫色主按钮、海军蓝 hero、粉蜡色块、营销级深阴影 |
 | [Claude](docs/design/references/claude.md) | 人与 AI 的视觉阶层（草稿虚线 vs 确认实线）、强调色稀有使用、深色表面只留给「系统铬」（raw/proto 查看器） | 奶油底+陶土色、衬线大标题、文学化排版 |
-| [Vercel](docs/design/references/vercel.md) | 近白画布、墨色主操作、等宽眉标/技术标签、微堆叠阴影+内描边、状态语义色软底、数据表头规范 | 100px 胶囊营销 CTA、网格渐变、极性翻转黑色区段 |
+| [Vercel](docs/design/references/vercel.md) | 近白画布、墨色主操作、等宽眉标/技术标签、微堆叠阴影+内描边、状态语义色软底、数据表头规范 | 100px 胶囊营销 CTA、网格渐变（极性翻转以 `ops` 主题「作战室」形式采纳） |
 
 ### taste-skill 三个旋钮（本项目固定值）
 
@@ -27,56 +27,75 @@ VISUAL_DENSITY = 8/10   # 高频数据页默认高密度；长文阅读区切换
 
 taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **pre-flight anti-slop 检查**；其 landing-page 专属规则（hero、pricing 等）对本项目不适用。
 
-## 1. Visual Theme & Atmosphere（主题与气质）
+## 1. Visual Theme & Atmosphere（主题系统与气质）
 
-**一句话：本地案头上的求职调度终端——安静、精确、可扫读；颜色只在「需要你行动」与「证据状态」上出现。**
+**定稿决策（2026-09-15）：三套主题全采纳，用户可自行切换；`desk` 为默认与品牌主主题。**
 
-- 冷调近白工作画布，不暖不花；层级靠**底色阶梯 + 1px 发丝线**建立，几乎不靠阴影。
-- 主操作是**墨色**（Vercel 式），不是彩色按钮海；彩色是稀有信号：朱=对外动作/风控，绿=证据/已确认，靛=AI/链接/焦点，琥珀=草稿/待定。
-- 两个 signature（本产品的记忆点）：
-  1. **漏斗导航**：左栏即七级业务管线，挂等宽计数与朱色待办点，顺序携带信息；
-  2. **证据点 ●◐○**：贯穿 Claim/JD 标签/评分依据/Guard 的三态符号（实心/半圆/空心），同时用形状与颜色区分，色弱可辨。
-- 深色表面只出现在「系统铬」：proto/raw JSON 查看器、终端类信息、缩略图占位；不做暗色营销区，不做全屏 dark theme（v1 仅浅色）。
-- 无渐变 hero、无插画、无 emoji 当图标、无三张等大特性卡——这些是 AI slop，本产品零容忍。
+| 主题 | data-theme | 气质 | 定位 |
+|---|---|---|---|
+| A 案头终端 | `desk` | 冷近白 + 墨色主操作 + 印章朱稀有信号；安静、精确、可扫读 | **默认**，品牌身份 |
+| B 暗色作战室 | `ops` | 全暗终端，数据屏感强；夜间与长时间盯盘友好 | 可选 |
+| C 极简靛蓝 | `minimal` | 白底 + 靛蓝主操作 + 轻阴影；最「标准 SaaS」，零学习成本 | 可选 |
+
+**主题不变量（三主题共享，任何主题不得改变）：**
+
+- **形状先于颜色**：证据点 ●◐○ 三态、AI 草稿虚线卡 + ◐ 模型标签、seal 对外动作条带形状、每屏一个主操作——这些 signature 用形状与文字承载语义，换主题不换形状。这是 `minimal` 主题下 AI 色与主操作色同为靛蓝仍可用的前提。
+- 结构布局（§5）、字体（§3）、组件形态（§4）、红线（§7）全部主题无关；主题只换 token 值。
+- `minimal` 已知取舍：靛蓝同时为主操作色与 AI 色，靠 ◐ 标签/虚线/模型标签的形状区分。
+- `ops` 长文阅读区（JD 原文/聊天/复盘正文）背景用 `--sheet` 提亮一档以降疲劳，行高不变。
+- 无渐变 hero、无插画、无 emoji 当图标、无三张等大特性卡——slop 零容忍在所有主题成立。
+
+### 1.1 主题系统实现规约
+
+- 全部颜色/圆角 token 以 CSS 自定义属性定义于 `:root[data-theme="desk|ops|minimal"]`；无属性时回退 `desk`。
+- 组件与页面**禁止硬编码 hex/rgb 字面量**，只准 `var(--*)`；出现即缺陷（配负向测试：组件源码扫描 hex）。
+- 切换入口：设置页 + TopBar 快捷切换；持久化 `localStorage("jobos.theme")`；**不跟随系统自动切换**（保持确定性）。
+- 切换时 120ms background/color 过渡；`prefers-reduced-motion` 下禁用。
+- 每个新组件验收前在**三主题下各过一遍**（截图三连）；正文/信号色对其所在画布满足 WCAG AA。
+- 深色系统铬表面（`--console`）在三主题保留：`desk`/`minimal` 下是局部深色反差区，`ops` 下与画布同族再暗一档。
 
 ## 2. Color Palette & Roles（色板与语义角色）
 
+> 值按主题分列（desk / ops / minimal）；角色与允许出现的位置三主题一致。
+
 ### 2.1 表面与墨色
 
-| Token | hex | 角色 |
-|---|---|---|
-| `--canvas` | #F7F8FA | 全局底色（冷近白） |
-| `--canvas-inset` | #F1F3F6 | 内嵌区：表格底、禁用块、raw 查看器外围 |
-| `--sheet` | #FFFFFF | 卡片/纸面/弹层 |
-| `--hairline` | #E3E6EB | 1px 默认描边/分隔线 |
-| `--hairline-strong` | #C9CFD8 | 输入框边、更强分隔 |
-| `--ink` | #1A1D21 | 标题/正文/主按钮面 |
-| `--ink-2` | #4E5661 | 次要文字 |
-| `--ink-3` | #8A919B | 弱化文字、占位、禁用 |
-| `--console` | #16181C | 深色系统铬（raw/proto 查看器） |
-| `--console-line` | #2A2E35 | 深色表面发丝线 |
+| Token | desk | ops | minimal | 角色 |
+|---|---|---|---|---|
+| `--canvas` | #F7F8FA | #0F1216 | #FBFBFC | 全局底色 |
+| `--canvas-inset` | #F1F3F6 | #0B0E11 | #F4F5F6 | 内嵌区：表格底、禁用块、raw 外围 |
+| `--sheet` | #FFFFFF | #171B21 | #FFFFFF | 卡片/纸面/弹层 |
+| `--hairline` | #E3E6EB | #262C35 | #EBECF0 | 1px 默认描边/分隔线 |
+| `--hairline-strong` | #C9CFD8 | #3A424E | #DDE0E5 | 输入框边、更强分隔 |
+| `--ink` | #1A1D21 | #E6EAF0 | #1C1F26 | 标题/正文/主按钮面 |
+| `--ink-2` | #4E5661 | #9AA3AF | #5C6270 | 次要文字 |
+| `--ink-3` | #8A919B | #5C6672 | #9095A0 | 弱化文字、占位、禁用 |
+| `--console` | #16181C | #0B0E11 | #16181C | 深色系统铬（raw/proto 查看器） |
+| `--console-line` | #2A2E35 | #1C2128 | #2A2E35 | 深色表面发丝线 |
+| `--radius` | 6px | 6px | 8px | 控件圆角（按钮/输入） |
+| `--radius-lg` | 8px | 8px | 10px | 卡片圆角 |
 
-### 2.2 信号色（严格按角色使用，不得挪作装饰）
+### 2.2 信号色（严格按角色使用，不得挪作装饰；值 / soft 底）
 
-| Token | hex | soft 底 | 允许出现的位置 |
-|---|---|---|---|
-| `--accent`（靛） | #2E5599 | #EAF1FA | AI 标记、链接、focus ring、运行中状态 |
-| `--evidence`（松绿） | #2E7D5B | #E6F1EB | 证据充分、已确认、成功状态、confirmed |
-| `--hold`（琥珀） | #94640A | #FAF1DC | AI 草稿、待确认、需人工注意（非错误） |
-| `--seal`（印章朱） | #B23A2E | #F9E9E6 | **仅**：对外动作区、外发按钮描边、待人工拍板标记 |
-| `--danger` | #B3261E | #F8E3E1 | 错误、风控暂停、破坏性操作 |
-| `--info` | #3468B5 | #E9F0FB | 中性信息提示 |
+| Token | desk | ops | minimal | 允许出现的位置 |
+|---|---|---|---|---|
+| `--accent`（靛） | #2E5599 / #EAF1FA | #5B8DEF / #1B2A44 | #5E6AD2 / #EEEEFB | AI 标记、链接、focus ring、运行中状态 |
+| `--evidence`（松绿） | #2E7D5B / #E6F1EB | #3FB984 / #12291F | #268A6E / #E8F4EF | 证据充分、已确认、成功状态 |
+| `--hold`（琥珀） | #94640A / #FAF1DC | #D9A441 / #2E2413 | #B88216 / #FBF3DF | AI 草稿、待确认、需人工注意（非错误） |
+| `--seal`（印章朱） | #B23A2E / #F9E9E6 | #E2574A / #2E1512 | #C5373C / #FCEBEA | **仅**：对外动作区、外发按钮描边、待人工拍板标记 |
+| `--danger` | #B3261E / #F8E3E1 | #E5484D / #2E1512 | #C5373C / #FCEBEA | 错误、风控暂停、破坏性操作 |
+| `--info` | #3468B5 / #E9F0FB | #6AA5F8 / #16233A | #3468B5 / #E9F0FB | 中性信息提示 |
 
 规则：
-- `--seal` 与 `--danger` 同属朱红家族：**seal 是"停，这一步只能你来"**（描边/标签/动作区边框），**danger 是"出错了"**（填底/报错）；同一屏两色不相邻大面积使用。
+- 主操作面用 `--primary-bg/--primary-fg`：desk=`--ink` 底白字；ops=`--ink` 底 `--canvas` 字（暗底浅钮）；minimal=`--accent` 底白字。主操作**每屏至多一个**，不是彩色按钮海；彩色是稀有信号：靛=AI/链接，绿=证据，琥珀=草稿，朱=对外动作。
+- `--seal` 与 `--danger` 同属红家族：**seal 是"停，这一步只能你来"**（描边/标签/动作区边框），**danger 是"出错了"**（填底/报错）；ops/minimal 下两值同族相近，靠用法与形状区分，同一屏不相邻大面积使用。
 - **评分/匹配度禁止红绿配色**，分数永远与 Fit/Gap/Risk 文字同行；分数不是颜色。
 - 任何信号色不得做整段背景或大色块；soft 底仅用于标签/提示条/行高亮。
-- 白/浅模式唯一版本；深色仅 `--console` 局部表面。
 
 ### 2.3 数据可视化
 
 - 漏斗：默认墨色灰阶（ink/ink-2/ink-3），**当前待处理级**用 `--accent`；转化为 0 的级不标红（0 不是错误）。
-- 图表顺序色板（仅在多序列时）：#2E5599 · #2E7D5B · #94640A · #6B5B95 · #8A6E54；不使用彩虹色。
+- 图表顺序色板（仅多序列时，按主题）：desk `#2E5599 · #2E7D5B · #94640A · #6B5B95 · #8A6E54`；ops `#5B8DEF · #3FB984 · #D9A441 · #9B8AFB · #C98A6A`；minimal `#5E6AD2 · #268A6E · #B88216 · #8A63D2 · #A8715A`。不使用彩虹色。
 - 薪资口径、rule_id 等枚举标签用中性灰底，不用信号色。
 
 ## 3. Typography Rules（字体规则）
@@ -111,13 +130,13 @@ taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **
 
 | 组件 | 样式 | 用途 |
 |---|---|---|
-| btn-primary | `--ink` 底白字，6px 圆角，高 32（紧凑 28） | 屏幕主操作，**每屏至多一个** |
-| btn-secondary | 白底，1px `--hairline-strong`，ink 字 | 次级操作 |
+| btn-primary | `--primary-bg` 底 `--primary-fg` 字（desk=墨底白字；ops=浅底暗字；minimal=靛底白字），圆角 `var(--radius)`，高 32（紧凑 28） | 屏幕主操作，**每屏至多一个** |
+| btn-secondary | `--sheet` 底，1px `--hairline-strong`，ink 字 | 次级操作 |
 | btn-ghost | 无底，hover 出浅底 | 工具栏/行内操作 |
-| btn-danger | 白底 danger 字 + 1px danger/30% 描边；破坏性确认后才允许 danger 填底 | 清除/拒绝/中止 |
+| btn-danger | `--sheet` 底 danger 字 + 1px danger/30% 描边；破坏性确认后才允许 danger 填底 | 清除/拒绝/中止 |
 | **outreach-action** | 白字 seal 描边标签「对外动作」+ 白底 seal 文字按钮 | 仅限 [OutreachActionBar] 内：复制招呼语/填充预览/标记已发送 |
 
-- 全部 6px 圆角矩形，**禁止 100px 胶囊**；仅状态徽标允许 pill。
+- 全部 `var(--radius)` 圆角矩形（6/6/8 按主题），**禁止 100px 胶囊**；仅状态徽标允许 pill。
 - 禁用：disabled 用 `--canvas-inset` 底 + `--ink-3` 字（Guard 阻断时导出按钮即此态，旁边必须说明缺什么）。
 - 加载中：按钮内 spinner + 禁用，不允许点击后无反馈。
 - **界面中物理上不存在「一键发送/自动投递/自动翻页/自动上传」控件**（协议与 UI 双红线）。
@@ -126,11 +145,11 @@ taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **
 
 | 组件 | 样式 | 语义 |
 |---|---|---|
-| card-sheet | 白底，1px `--hairline`，8px 圆角，内边距 16 | 普通内容 |
-| card-draft | 白底，**1px 虚线 `--hold`**，左上角小标签「◐ AI 草稿 · 模型名 · 时间」 | 所有未经本人确认的 AI 产出 |
-| card-confirmed | 白底，1px hairline，标签「● 已确认 · 时间」（evidence 绿点） | 本人确认后，方可进事实/导出/投影 |
+| card-sheet | `--sheet` 底，1px `--hairline`，`var(--radius-lg)` 圆角，内边距 16 | 普通内容 |
+| card-draft | `--sheet` 底，**1px 虚线 `--hold`**，左上角小标签「◐ AI 草稿 · 模型名 · 时间」 | 所有未经本人确认的 AI 产出 |
+| card-confirmed | `--sheet` 底，1px hairline，标签「● 已确认 · 时间」（evidence 绿点） | 本人确认后，方可进事实/导出/投影 |
 | card-console | `--console` 深底，等宽浅字 | raw JSON/proto/解码原文等系统铬 |
-| card-danger-zone | 白底 1px danger/40%，顶部 danger soft 条 | 风控/清除等危险区 |
+| card-danger-zone | `--sheet` 底 1px danger/40%，顶部 danger soft 条 | 风控/清除等危险区 |
 
 ### 4.3 证据点 EvidenceDot（signature 组件）
 
@@ -152,7 +171,7 @@ taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **
 
 ### 4.6 输入与表单
 
-- 高 32，6px 圆角，1px `--hairline-strong`；focus 为 2px accent/40% 外环（不靠改边框色 alone）。
+- 高 32，`var(--radius)` 圆角，1px `--hairline-strong`；focus 为 2px accent/40% 外环（不靠改边框色 alone）。
 - 错误：danger soft 底 + 具体修复说明（错误不道歉、不含糊）。
 - **红线字段（公司名/职位名/起止时间/学历）在在线填充流中输入框置只读并标注「需你手填」**；载荷中出现这些字段时行内展示 skipped_redline 反馈。
 - 节流/风控参数输入低于 1800ms、并发>1 即拒绝，拒绝说明引用红线而非仅说"非法输入"。
@@ -162,7 +181,7 @@ taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **
 | 组件 | 规范要点 |
 |---|---|
 | FunnelNav | 220px；七级竖排，级间 1px 竖线连接；计数 mono-sm 右置；有待办项时级名前置 seal 小点；当前页 accent 竖条+accent soft 底 |
-| TopBar | 高 48，白底底发丝线；扩展连接灯（●灰/黄/绿）、节流只读快照、AI provider、上次备份；风控暂停时整条 danger soft + 深色停止图标 |
+| TopBar | 高 48，`--sheet` 底 + 底发丝线；扩展连接灯（●灰/黄/绿）、节流只读快照、AI provider、上次备份、主题快捷切换；风控暂停时整条 danger soft + 深色停止图标 |
 | OutreachActionBar | seal 1px 包围的条带：标题「对外动作（都由你本人完成，系统不会自动发送）」+ 三按钮 + 红线字段说明；全站唯一形状 |
 | GuardList | 阻断（danger 点）/警告（hold 点）分组；阻断项置顶；存在阻断时关联主按钮 disabled |
 | StatusTimeline | 只渲染 confirmed 事件；draft 不出现节点；新确认节点 150ms 淡入 |
@@ -262,6 +281,7 @@ taste skill（`.trae/skills/design-taste-frontend`）用于每次实现后的 **
 8. 键盘走查一遍；窄屏只读策略是否生效。
 9. 文案是否与按钮同名反馈？错误是否说明了怎么修？
 10. 红线负向测试是否由实现同步补上（参考 [05 测试策略](docs/delivery/05-测试策略与验收.md)）。
+11. 切到 `ops` / `minimal` 各过一遍：主操作可辨、AI 草稿虚线与证据点形状成立、对比度无塌陷、无硬编码 hex。
 
 ### 9.4 变更规则
 

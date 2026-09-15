@@ -1,9 +1,11 @@
+import asyncio
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from services.api.app.config import Settings
+from services.api.app.registry import ALLOWED_COMMANDS, ExtensionRegistry
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,3 +36,38 @@ def test_compose_publishes_only_to_loopback() -> None:
     published_lines = [line.strip() for line in compose.splitlines() if "${HOST_BIND" in line]
     assert published_lines
     assert all("127.0.0.1" in line for line in published_lines)
+
+
+def test_command_registry_contains_only_frozen_safe_command_set() -> None:
+    assert {
+        "capture_list",
+        "capture_details",
+        "abort",
+        "fill_online_resume",
+        "copy_greeting",
+        "capture_chat",
+    } == ALLOWED_COMMANDS
+    assert not {
+        "send_message",
+        "deliver",
+        "auto_apply",
+        "auto_greet",
+        "auto_next_page",
+        "auto_upload",
+    } & ALLOWED_COMMANDS
+
+
+def test_forbidden_command_cannot_be_dispatched() -> None:
+    registry = ExtensionRegistry()
+    with pytest.raises(ValueError, match="not registered"):
+        asyncio.run(registry.send_command("send_message", {}))
+
+
+def test_browser_bundle_has_no_pairing_token_fetcher() -> None:
+    browser_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "apps" / "web" / "src").rglob("*")
+        if path.suffix in {".ts", ".tsx"}
+    )
+    assert "extension/pairing-token" not in browser_sources
+    assert "fetchPairingToken" not in browser_sources

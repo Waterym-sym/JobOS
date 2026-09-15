@@ -4,11 +4,13 @@ import asyncio
 import uvicorn
 
 from services.api.app.config import get_settings
+from services.api.app.db import close_pool
 
 
 async def serve(container: bool) -> None:
     settings = get_settings()
     bind_host = "0.0.0.0" if container else settings.host_bind
+
     api = uvicorn.Server(
         uvicorn.Config(
             "services.api.app.main:api_app",
@@ -25,7 +27,10 @@ async def serve(container: bool) -> None:
             log_config=None,
         )
     )
-    await asyncio.gather(api.serve(), gateway.serve())
+    try:
+        await asyncio.gather(api.serve(), gateway.serve())
+    finally:
+        await close_pool()
 
 
 def main() -> None:

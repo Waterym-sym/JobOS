@@ -1,8 +1,7 @@
 import json
 import logging
 import re
-import secrets
-import time
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -11,8 +10,22 @@ from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from services.api.app.capture_repo import (
+    complete_batch,
+    mark_progress,
+    release_event,
+    reserve_event,
+    upsert_raw_job,
+)
 from services.api.app.config import Settings, get_settings
+from services.api.app.event_models import (
+    EVENT_PAYLOAD_MODELS,
+    EventEnvelope,
+    ReceiptEnvelope,
+)
 from services.api.app.pairing import PairingTokenStore
+from services.api.app.protocol import uuid7
+from services.api.app.registry import ExtensionInstance, registry
 
 PROTOCOL_VERSION = 1
 EXTENSION_ID_PATTERN = re.compile(r"^[a-p]{32}$")
@@ -35,14 +48,6 @@ class AuthPing(BaseModel):
     id: UUID
     type: Literal["auth_ping"]
     payload: AuthPingPayload
-
-
-def uuid7() -> str:
-    timestamp_ms = int(time.time() * 1000) & ((1 << 48) - 1)
-    random_a = secrets.randbits(12)
-    random_b = secrets.randbits(62)
-    value = (timestamp_ms << 80) | (0x7 << 76) | (random_a << 64) | (0b10 << 62) | random_b
-    return str(UUID(int=value))
 
 
 def is_allowed_origin(origin: str | None) -> bool:
@@ -92,6 +97,87 @@ def audit(event: str, outcome: str, trace_id: str, **details: Any) -> None:
             ensure_ascii=True,
         )
     )
+
+
+async def _handle_event_once(envelope: EventEnvelope) -> None:
+    model_cls = EVENT_PAYLOAD_MODELS.get(envelope.type)
+    if model_cls is None:
+        raise ValueError(f"unknown event type: {envelope.type}")
+    payload: Any = model_cls.model_validate(envelope.payload)
+    capture_id = envelope.capture_id or getattr(payload, "batch_id", None)
+
+    if envelope.type in ("job.captured", "job.updated"):
+        if envelope.capture_id is not None and payload.batch_id is None:
+            payload.batch_id = envelope.capture_id
+        await upsert_raw_job(payload)
+        audit(
+            "extension.event",
+            envelope.type,
+            str(envelope.id),
+            ext_id=payload.ext_id,
+            tier=payload.tier,
+        )
+    elif envelope.type == "capture.phase":
+        if capture_id is not None:
+            await mark_progress(capture_id, payload.model_dump())
+    elif envelope.type == "capture.completed":
+        await complete_batch(
+            payload.capture_id,
+            status="completed",
+            stats=payload.stats.model_dump(),
+            finished_at=payload.finished_at,
+        )
+    elif envelope.type == "capture.error":
+        audit(
+            "extension.event",
+            "capture.error",
+            str(envelope.id),
+            code=payload.code,
+            risk=payload.risk,
+            recoverable=payload.recoverable,
+        )
+        if capture_id is not None and payload.risk:
+            # ADR-009: risk halt, never auto-retry.
+            await complete_batch(
+                capture_id,
+                status="risk_halted",
+                stats={"success": 0, "dup": 0, "risk_halted": True},
+            )
+        elif capture_id is not None:
+            await complete_batch(
+                capture_id,
+                status="failed",
+                stats={"code": payload.code, "recoverable": payload.recoverable},
+            )
+
+
+async def handle_event(envelope: EventEnvelope) -> None:
+    if not await reserve_event(envelope.id, envelope.type, envelope.capture_id):
+        audit("extension.event", "duplicate_ignored", str(envelope.id), type=envelope.type)
+        return
+    try:
+        await _handle_event_once(envelope)
+    except Exception:
+        await release_event(envelope.id)
+        raise
+
+
+async def dispatch_message(message: Any) -> None:
+    if not isinstance(message, dict):
+        raise TypeError("message must be a JSON object")
+    kind = message.get("kind")
+    if kind == "event":
+        await handle_event(EventEnvelope.model_validate(message))
+    elif kind == "receipt":
+        envelope = ReceiptEnvelope.model_validate(message)
+        audit(
+            "ws.receipt",
+            envelope.type,
+            str(envelope.id),
+            command_id=str(envelope.command_id) if envelope.command_id else None,
+        )
+    else:
+        raise ValueError(f"unexpected message kind: {kind}")
 
 
 async def websocket_gateway(websocket: WebSocket) -> None:
@@ -181,14 +267,45 @@ async def websocket_gateway(websocket: WebSocket) -> None:
         instance_id=instance_id,
     )
 
+    instance = ExtensionInstance(
+        instance_id=instance_id,
+        websocket=websocket,
+        extension_version=ping.payload.extension_version,
+        protocol_version=ping.payload.protocol_version,
+        connected_at=datetime.now(UTC),
+    )
+    await registry.register(instance)
+
     try:
         while True:
-            message = await websocket.receive_json()
-            audit(
-                "ws.message",
-                "ignored_unimplemented",
-                str(message.get("id", uuid7())) if isinstance(message, dict) else uuid7(),
-                message_type=message.get("type") if isinstance(message, dict) else None,
+            try:
+                message = await websocket.receive_json()
+            except ValueError:
+                # Non-JSON frame; wait for the next one.
+                continue
+            trace = (
+                str(message.get("id", uuid7()))
+                if isinstance(message, dict)
+                else uuid7()
             )
-    except (WebSocketDisconnect, ValueError, TypeError):
+            try:
+                await dispatch_message(message)
+            except (ValidationError, ValueError, TypeError) as exc:
+                audit("ws.message", "invalid", trace, reason=str(exc)[:200])
+                await websocket.send_json(
+                    error_envelope(
+                        "MESSAGE_INVALID",
+                        "Message failed protocol validation",
+                        trace,
+                    )
+                )
+            except Exception:  # noqa: BLE001 - keep the socket alive
+                logger.exception("event dispatch failed")
+                audit("ws.message", "error", trace)
+                await websocket.send_json(
+                    error_envelope("INTERNAL_ERROR", "Event handling failed", trace)
+                )
+    except WebSocketDisconnect:
         return
+    finally:
+        registry.unregister(instance_id)

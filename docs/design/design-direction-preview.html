@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobOS 视觉方向对比 — 定稿评审用</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Inter, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif; background: #EDEFF2; color: #1A1D21; }
+  .page-header { max-width: 1180px; margin: 0 auto; padding: 40px 24px 8px; }
+  .page-header h1 { font-size: 22px; font-weight: 600; }
+  .page-header p { font-size: 13px; color: #4E5661; margin-top: 6px; line-height: 1.7; }
+  .verdict { max-width: 1180px; margin: 12px auto 0; padding: 0 24px; font-size: 12.5px; color: #4E5661; }
+  .verdict code { font-family: "JetBrains Mono", Consolas, "Cascadia Mono", ui-monospace, monospace; font-size: 11.5px; background: #fff; padding: 1px 5px; border-radius: 4px; }
+
+  /* ============ 方向区块通用 ============ */
+  .demo { max-width: 1180px; margin: 28px auto; padding: 0 24px; }
+  .demo-title { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .demo-title h2 { font-size: 16px; font-weight: 600; }
+  .demo-title .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .demo-note { font-size: 12.5px; color: #4E5661; line-height: 1.7; margin-bottom: 14px; max-width: 900px; }
+
+  /* 每个 demo 内部用自己的变量 */
+  .shell { border-radius: 10px; overflow: hidden; border: 1px solid; display: grid; grid-template-columns: 208px 1fr; min-height: 560px; }
+  .nav { padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hairline); }
+  .nav .brand { font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 0 8px 10px; color: var(--ink-2); font-family: "JetBrains Mono", Consolas, monospace; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: var(--ink-2); }
+  .nav-item .cnt { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--seal); }
+  .nav-item.active { background: var(--accent-soft); color: var(--ink); font-weight: 500; box-shadow: inset 2px 0 0 var(--accent); }
+  .nav-foot { margin-top: auto; padding: 8px; font-size: 11px; color: var(--ink-3); border-top: 1px solid var(--hairline); font-family: var(--mono); }
+
+  .main { padding: 0; display: flex; flex-direction: column; background: var(--canvas); }
+  .topbar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--hairline); font-size: 12px; color: var(--ink-2); background: var(--sheet); }
+  .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--evidence); display: inline-block; margin-right: 5px; }
+  .topbar .mono { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .content { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  .row-head { display: flex; align-items: baseline; gap: 10px; }
+  .row-head h3 { font-size: 16px; font-weight: 600; color: var(--ink); }
+  .row-head .sub { font-size: 12px; color: var(--ink-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--sheet); border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 500; color: var(--ink-2); padding: 8px 12px; border-bottom: 1px solid var(--hairline); font-family: var(--mono); letter-spacing: .03em; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--hairline); color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+  td .mono { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; }
+  .pill i { width: 6px; height: 6px; border-radius: 50%; }
+  .pill.g { background: var(--evidence-soft); color: var(--evidence); } .pill.g i { background: var(--evidence); }
+  .pill.h { background: var(--hold-soft); color: var(--hold); } .pill.h i { background: var(--hold); }
+  .pill.a { background: var(--accent-soft); color: var(--accent); } .pill.a i { background: var(--accent); }
+  .ev { margin-right: 6px; font-size: 12px; }
+  .ev.full { color: var(--evidence); } .ev.half { color: var(--hold); } .ev.none { color: var(--ink-3); }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { border-radius: 8px; padding: 14px; background: var(--sheet); border: 1px solid var(--hairline); }
+  .card h4 { font-size: 13px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 10.5px; padding: 1.5px 7px; border-radius: 5px; font-weight: 500; }
+  .card p { font-size: 12.5px; line-height: 1.75; color: var(--ink-2); margin-top: 8px; }
+  .card.draft { border: 1px dashed var(--hold); }
+  .card.draft .tag { background: var(--hold-soft); color: var(--hold); }
+  .card.confirmed .tag { background: var(--evidence-soft); color: var(--evidence); }
+  .card .acts { margin-top: 10px; display: flex; gap: 8px; }
+
+  .outreach { border: 1px solid var(--seal); border-radius: 8px; padding: 12px 14px; background: var(--sheet); display: flex; align-items: center; gap: 12px; }
+  .outreach .lbl { font-size: 11px; font-weight: 600; color: var(--seal); letter-spacing: .05em; white-space: nowrap; }
+  .outreach .hint { font-size: 11px; color: var(--ink-3); margin-left: auto; max-width: 260px; text-align: right; }
+
+  .btn { font-size: 12.5px; font-weight: 500; padding: 6px 14px; border-radius: var(--radius, 6px); border: 1px solid transparent; cursor: pointer; }
+  .b1 { background: var(--primary-bg); color: var(--primary-fg); }
+  .b2 { background: var(--sheet); color: var(--ink); border-color: var(--hairline-strong); }
+  .b3 { background: transparent; color: var(--ink-2); }
+  .b4 { background: var(--sheet); color: var(--danger); border-color: var(--danger); }
+  .b5 { background: var(--sheet); color: var(--seal); border-color: var(--seal); }
+  .btnrow { display: flex; gap: 8px; align-items: center; }
+  .btnrow .cap { font-size: 11px; color: var(--ink-3); margin-left: 8px; }
+
+  /* ============ A 案头终端（v0.2 提案） ============ */
+  .dir-a { --canvas:#F7F8FA; --sheet:#FFFFFF; --hairline:#E3E6EB; --hairline-strong:#C9CFD8; --ink:#1A1D21; --ink-2:#4E5661; --ink-3:#8A919B;
+    --accent:#2E5599; --accent-soft:#EAF1FA; --evidence:#2E7D5B; --evidence-soft:#E6F1EB; --hold:#94640A; --hold-soft:#FAF1DC;
+    --seal:#B23A2E; --danger:#B3261E; --primary-bg:#1A1D21; --primary-fg:#FFFFFF; --radius:6px; --mono:"JetBrains Mono",Consolas,monospace; }
+  .dir-a .shell { background: var(--canvas); border-color: var(--hairline); }
+  .dir-a .nav { background: var(--sheet); }
+  .dir-a .demo-title .badge { background: #EAF1FA; color: #2E5599; }
+
+  /* ============ B 暗色作战室 ============ */
+  .dir-b { --canvas:#0F1216; --sheet:#171B21; --hairline:#262C35; --hairline-strong:#3A424E; --ink:#E6EAF0; --ink-2:#9AA3AF; --ink-3:#5C6672;
+    --accent:#5B8DEF; --accent-soft:#1B2A44; --evidence:#3FB984; --evidence-soft:#12291F; --hold:#D9A441; --hold-soft:#2E2413;
+    --seal:#E2574A; --danger:#E2574A; --primary-bg:#E6EAF0; --primary-fg:#0F1216; --radius:6px; --mono:"JetBrains Mono",Consolas,monospace; }
+  .dir-b .shell { background: var(--canvas); border-color: var(--hairline); }
+  .dir-b .nav { background: var(--sheet); }
+  .dir-b .demo-title .badge { background: #1B2A44; color: #5B8DEF; }
+  .dir-b .demo-note { color: #6B7480; }
+
+  /* ============ C Linear 式极简靛蓝 ============ */
+  .dir-c { --canvas:#FBFBFC; --sheet:#FFFFFF; --hairline:#EBECF0; --hairline-strong:#DDE0E5; --ink:#1C1F26; --ink-2:#5C6270; --ink-3:#9095A0;
+    --accent:#5E6AD2; --accent-soft:#EEEEFB; --evidence:#268A6E; --evidence-soft:#E8F4EF; --hold:#B88216; --hold-soft:#FBF3DF;
+    --seal:#D14343; --danger:#D14343; --primary-bg:#5E6AD2; --primary-fg:#FFFFFF; --radius:8px; --mono:"JetBrains Mono",Consolas,monospace; }
+  .dir-c .shell { background: var(--canvas); border-color: var(--hairline); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .dir-c .nav { background: var(--sheet); }
+  .dir-c .demo-title .badge { background: #EEEEFB; color: #5E6AD2; }
+
+  @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .nav { display: none; } .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>JobOS 视觉方向定稿对比（同一内容骨架 × 三种皮肤）</h1>
+  <p>三块预览使用完全相同的业务元素：漏斗导航、岗位池表格、AI 草稿卡/已确认卡、证据点、对外动作条、按钮体系。
+  差异只在 token 层（底色、主操作色、强调色策略、圆角、明暗）。</p>
+  <p style="margin-top:8px"><strong style="color:#2E7D5B">定稿结果（2026-09-15）：三方向均采纳为可切换主题</strong> —— A=desk（默认）/ B=ops / C=minimal，详见根 <a href="../../../DESIGN.md" style="color:#2E5599">DESIGN.md v1.0</a> §1/§2。</p>
+</div>
+<p class="verdict">判定要点：① 主操作是否一眼可辨 ② AI 草稿与你的东西是否分层清楚 ③ 高密度表格是否耐看 ④ 「对外动作」的仪式感够不够。</p>
+
+<!-- ================= 方向 A ================= -->
+<div class="demo dir-a">
+  <div class="demo-title"><h2>A · 冷调案头 + 印章朱（v0.2 现方案）</h2><span class="badge">AI 推荐</span></div>
+  <p class="demo-note">冷近白画布，层级靠发丝线不靠阴影；主操作用墨色（黑按钮），彩色只表达语义（靛=AI/链接、绿=证据、琥珀=草稿、朱=对外动作）。
+  气质：安静、克制、像你案头上的一台调度终端。代价：第一眼不如彩色 SaaS「亮」，高级感来自细节纪律。</p>
+  <div class="shell">
+    <div class="nav">
+      <div class="brand">JOBOS v1.1</div>
+      <div class="nav-item"><span>采集批次</span><span class="cnt">3</span></div>
+      <div class="nav-item"><span>岗位池</span><span class="cnt">128</span></div>
+      <div class="nav-item active"><span>候选区</span><span class="cnt">9</span></div>
+      <div class="nav-item"><span>投递包</span><span class="cnt">4</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>待确认</span><span class="cnt">6</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>复盘</span></div>
+      <div class="nav-item"><span>知识库</span></div>
+      <div class="nav-foot">节流 1800ms±20%<br>并发 1 · 扩展已连接</div>
+    </div>
+    <div class="main">
+      <div class="topbar"><span><span class="lamp"></span>扩展连接正常</span><span class="mono">capture_batch#b-0912</span><span class="mono" style="margin-left:auto">LLM: gpt-x · 本地优先</span></div>
+      <div class="content">
+        <div class="row-head"><h3>候选区 · 9 个待决策岗位</h3><span class="sub">Stage-0 纯规则筛选 · 0 次 AI 调用</span></div>
+        <table>
+          <tr><th>岗位</th><th>薪资口径</th><th>匹配依据</th><th>状态</th></tr>
+          <tr><td><span class="ev full">●</span>后端开发工程师（Go）</td><td><span class="mono">25-35K · 15薪</span></td><td><span class="mono">rule:skill-go-01</span> +3 项命中</td><td><span class="pill a"><i></i>AI 已生成草稿</span></td></tr>
+          <tr><td><span class="ev half">◐</span>平台开发工程师</td><td><span class="mono">20-30K · 月</span></td><td><span class="mono">rule:skill-k8s-02</span> +1 项命中</td><td><span class="pill h"><i></i>待确认</span></td></tr>
+          <tr><td><span class="ev none">○</span>全栈工程师（React）</td><td><span class="mono">18-28K</span></td><td><span class="mono">rule:exp-3y</span> +2 项命中</td><td><span class="pill g"><i></i>已入投递包</span></td></tr>
+          <tr><td><span class="ev none">○</span>数据开发工程师</td><td><span class="mono">22-32K · 14薪</span></td><td><span class="mono">rule:skill-sql-01</span></td><td><span class="pill h"><i></i>待确认</span></td></tr>
+        </table>
+        <div class="cards">
+          <div class="card draft">
+            <h4>招呼语 · 草稿 <span class="tag">◐ AI · gpt-x · 13:02</span></h4>
+            <p>看到贵司在招聘 Go 后端，我有 3 年微服务与高并发经验，与 JD 中「网关稳定性」要求匹配——请打开以确认或改写。未经确认不会进入发送流程。</p>
+            <div class="acts"><button class="btn b1">确认</button><button class="btn b3">改写</button><button class="btn b4">拒绝</button></div>
+          </div>
+          <div class="card confirmed">
+            <h4>简历 · 定向版 <span class="tag">● 已确认 · 12:40</span></h4>
+            <p>三形态：ATS / Showcase / 在线填充。所有 Claim 带证据锚点，Truth Guard 校验通过（12/12）。</p>
+            <div class="acts"><button class="btn b2">查看 Diff</button><button class="btn b2">导出</button></div>
+          </div>
+        </div>
+        <div class="outreach">
+          <span class="lbl">对外动作</span>
+          <button class="btn b5">复制招呼语</button><button class="btn b5">填充预览</button><button class="btn b5">标记已发送</button>
+          <span class="hint">均由你本人完成，系统不自动发送；公司/职位/时间/学历永远不写入</span>
+        </div>
+        <div class="btnrow">
+          <button class="btn b1">主操作（每屏一个）</button><button class="btn b2">次级</button><button class="btn b3">行内</button><button class="btn b4">危险</button>
+          <span class="cap">黑=主操作，彩色只做语义</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 方向 B ================= -->
+<div class="demo dir-b">
+  <div class="demo-title"><h2>B · 暗色作战室</h2><span class="badge">备选</span></div>
+  <p class="demo-note">全暗色终端气质，数据屏感强、夜间不刺眼，工程味最浓。代价：长文阅读（JD/复盘）易疲劳，白天办公环境对比度差，
+  截图给他人看不够「正式」；且 AI 草稿的琥珀虚线在暗底上仪式感减弱。v0.2 原方案只把深色留给 raw/proto 查看器。</p>
+  <div class="shell">
+    <div class="nav">
+      <div class="brand">JOBOS v1.1</div>
+      <div class="nav-item"><span>采集批次</span><span class="cnt">3</span></div>
+      <div class="nav-item"><span>岗位池</span><span class="cnt">128</span></div>
+      <div class="nav-item active"><span>候选区</span><span class="cnt">9</span></div>
+      <div class="nav-item"><span>投递包</span><span class="cnt">4</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>待确认</span><span class="cnt">6</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>复盘</span></div>
+      <div class="nav-item"><span>知识库</span></div>
+      <div class="nav-foot">节流 1800ms±20%<br>并发 1 · 扩展已连接</div>
+    </div>
+    <div class="main">
+      <div class="topbar"><span><span class="lamp"></span>扩展连接正常</span><span class="mono">capture_batch#b-0912</span><span class="mono" style="margin-left:auto">LLM: gpt-x · 本地优先</span></div>
+      <div class="content">
+        <div class="row-head"><h3>候选区 · 9 个待决策岗位</h3><span class="sub">Stage-0 纯规则筛选 · 0 次 AI 调用</span></div>
+        <table>
+          <tr><th>岗位</th><th>薪资口径</th><th>匹配依据</th><th>状态</th></tr>
+          <tr><td><span class="ev full">●</span>后端开发工程师（Go）</td><td><span class="mono">25-35K · 15薪</span></td><td><span class="mono">rule:skill-go-01</span> +3 项命中</td><td><span class="pill a"><i></i>AI 已生成草稿</span></td></tr>
+          <tr><td><span class="ev half">◐</span>平台开发工程师</td><td><span class="mono">20-30K · 月</span></td><td><span class="mono">rule:skill-k8s-02</span> +1 项命中</td><td><span class="pill h"><i></i>待确认</span></td></tr>
+          <tr><td><span class="ev none">○</span>全栈工程师（React）</td><td><span class="mono">18-28K</span></td><td><span class="mono">rule:exp-3y</span> +2 项命中</td><td><span class="pill g"><i></i>已入投递包</span></td></tr>
+          <tr><td><span class="ev none">○</span>数据开发工程师</td><td><span class="mono">22-32K · 14薪</span></td><td><span class="mono">rule:skill-sql-01</span></td><td><span class="pill h"><i></i>待确认</span></td></tr>
+        </table>
+        <div class="cards">
+          <div class="card draft">
+            <h4>招呼语 · 草稿 <span class="tag">◐ AI · gpt-x · 13:02</span></h4>
+            <p>看到贵司在招聘 Go 后端，我有 3 年微服务与高并发经验，与 JD 中「网关稳定性」要求匹配——请打开以确认或改写。未经确认不会进入发送流程。</p>
+            <div class="acts"><button class="btn b1">确认</button><button class="btn b3">改写</button><button class="btn b4">拒绝</button></div>
+          </div>
+          <div class="card confirmed">
+            <h4>简历 · 定向版 <span class="tag">● 已确认 · 12:40</span></h4>
+            <p>三形态：ATS / Showcase / 在线填充。所有 Claim 带证据锚点，Truth Guard 校验通过（12/12）。</p>
+            <div class="acts"><button class="btn b2">查看 Diff</button><button class="btn b2">导出</button></div>
+          </div>
+        </div>
+        <div class="outreach">
+          <span class="lbl">对外动作</span>
+          <button class="btn b5">复制招呼语</button><button class="btn b5">填充预览</button><button class="btn b5">标记已发送</button>
+          <span class="hint">均由你本人完成，系统不自动发送；公司/职位/时间/学历永远不写入</span>
+        </div>
+        <div class="btnrow">
+          <button class="btn b1">主操作（每屏一个）</button><button class="btn b2">次级</button><button class="btn b3">行内</button><button class="btn b4">危险</button>
+          <span class="cap">浅色=主操作（暗底惯例），彩色做语义</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 方向 C ================= -->
+<div class="demo dir-c">
+  <div class="demo-title"><h2>C · Linear 式极简靛蓝</h2><span class="badge">备选</span></div>
+  <p class="demo-note">最「标准现代 SaaS」的一版：白底 + 靛蓝主按钮 + 8px 圆角 + 轻阴影。上手零学习成本，观感大众缘最好。
+  代价：靛蓝既是主操作色又是 AI/链接色，两者语义重叠，「这是 AI 产出」的辨识度下降；朱色降级为普通错误红，「对外动作」失去专属仪式感。</p>
+  <div class="shell">
+    <div class="nav">
+      <div class="brand">JOBOS v1.1</div>
+      <div class="nav-item"><span>采集批次</span><span class="cnt">3</span></div>
+      <div class="nav-item"><span>岗位池</span><span class="cnt">128</span></div>
+      <div class="nav-item active"><span>候选区</span><span class="cnt">9</span></div>
+      <div class="nav-item"><span>投递包</span><span class="cnt">4</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>待确认</span><span class="cnt">6</span><span class="dot" style="margin-left:6px"></span></div>
+      <div class="nav-item"><span>复盘</span></div>
+      <div class="nav-item"><span>知识库</span></div>
+      <div class="nav-foot">节流 1800ms±20%<br>并发 1 · 扩展已连接</div>
+    </div>
+    <div class="main">
+      <div class="topbar"><span><span class="lamp"></span>扩展连接正常</span><span class="mono">capture_batch#b-0912</span><span class="mono" style="margin-left:auto">LLM: gpt-x · 本地优先</span></div>
+      <div class="content">
+        <div class="row-head"><h3>候选区 · 9 个待决策岗位</h3><span class="sub">Stage-0 纯规则筛选 · 0 次 AI 调用</span></div>
+        <table>
+          <tr><th>岗位</th><th>薪资口径</th><th>匹配依据</th><th>状态</th></tr>
+          <tr><td><span class="ev full">●</span>后端开发工程师（Go）</td><td><span class="mono">25-35K · 15薪</span></td><td><span class="mono">rule:skill-go-01</span> +3 项命中</td><td><span class="pill a"><i></i>AI 已生成草稿</span></td></tr>
+          <tr><td><span class="ev half">◐</span>平台开发工程师</td><td><span class="mono">20-30K · 月</span></td><td><span class="mono">rule:skill-k8s-02</span> +1 项命中</td><td><span class="pill h"><i></i>待确认</span></td></tr>
+          <tr><td><span class="ev none">○</span>全栈工程师（React）</td><td><span class="mono">18-28K</span></td><td><span class="mono">rule:exp-3y</span> +2 项命中</td><td><span class="pill g"><i></i>已入投递包</span></td></tr>
+          <tr><td><span class="ev none">○</span>数据开发工程师</td><td><span class="mono">22-32K · 14薪</span></td><td><span class="mono">rule:skill-sql-01</span></td><td><span class="pill h"><i></i>待确认</span></td></tr>
+        </table>
+        <div class="cards">
+          <div class="card draft">
+            <h4>招呼语 · 草稿 <span class="tag">◐ AI · gpt-x · 13:02</span></h4>
+            <p>看到贵司在招聘 Go 后端，我有 3 年微服务与高并发经验，与 JD 中「网关稳定性」要求匹配——请打开以确认或改写。未经确认不会进入发送流程。</p>
+            <div class="acts"><button class="btn b1">确认</button><button class="btn b3">改写</button><button class="btn b4">拒绝</button></div>
+          </div>
+          <div class="card confirmed">
+            <h4>简历 · 定向版 <span class="tag">● 已确认 · 12:40</span></h4>
+            <p>三形态：ATS / Showcase / 在线填充。所有 Claim 带证据锚点，Truth Guard 校验通过（12/12）。</p>
+            <div class="acts"><button class="btn b2">查看 Diff</button><button class="btn b2">导出</button></div>
+          </div>
+        </div>
+        <div class="outreach">
+          <span class="lbl">对外动作</span>
+          <button class="btn b5">复制招呼语</button><button class="btn b5">填充预览</button><button class="btn b5">标记已发送</button>
+          <span class="hint">均由你本人完成，系统不自动发送；公司/职位/时间/学历永远不写入</span>
+        </div>
+        <div class="btnrow">
+          <button class="btn b1">主操作（每屏一个）</button><button class="btn b2">次级</button><button class="btn b3">行内</button><button class="btn b4">危险</button>
+          <span class="cap">靛蓝=主操作=AI 色，语义重叠是本方案已知取舍</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

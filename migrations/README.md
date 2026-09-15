@@ -1,3 +1,13 @@
 # Database migrations
 
-The first Alembic migration remains blocked until the database skeleton is reconciled with architecture topic 12 and receives human review. The SQL file in `contracts/db` is a comparison draft, not an executable migration.
+Alembic is the only executable database migration entry point. The SQL file in
+`contracts/db` remains a comparison contract and must never be executed.
+
+Review before running, then apply explicitly:
+
+```powershell
+python -m alembic upgrade head
+```
+
+Production sequencing remains backup → migration check → infrastructure →
+Alembic migration → service upgrade. API startup never applies migrations.

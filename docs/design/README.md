@@ -4,9 +4,10 @@
 
 | 路径 | 角色 |
 |---|---|
-| [`../../DESIGN.md`](../../DESIGN.md) | **唯一视觉/交互真源 v0.2**：主题、色板与语义角色、字阶、组件规范、布局、深度、Do/Don't、响应式、Agent Prompt Guide |
+| [`../../DESIGN.md`](../../DESIGN.md) | **唯一视觉/交互真源 v1.0（已定稿）**：三主题系统（desk 默认 / ops / minimal）、色板与语义角色、字阶、组件规范、布局、深度、Do/Don't、响应式、Agent Prompt Guide |
 | [references/](references/README.md) | 外部产品 DESIGN.md 只读参考副本（Linear / Notion / Claude / Vercel，MIT，带来源声明） |
-| [frontend-design-draft-v0.1.md](frontend-design-draft-v0.1.md) | v0.1 草案，**已归档**，被根 DESIGN.md v0.2 替代；保留作演进留痕 |
+| [design-direction-preview.html](design-direction-preview.html) | 三方向实测对比页（定稿依据），浏览器直接打开；定稿结果已标注在页首 |
+| [frontend-design-draft-v0.1.md](frontend-design-draft-v0.1.md) | v0.1 草案，**已归档**，被根 DESIGN.md 替代；保留作演进留痕 |
 
 ## 前端任务的标准动线
 

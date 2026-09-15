@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WS_DIR = ROOT / "contracts" / "ws"
@@ -34,6 +35,32 @@ def test_rest_contract_is_frozen_and_loopback_only() -> None:
     assert "version: 1.0.0" in openapi
     assert "x-status: v1" in openapi
     assert "http://127.0.0.1:8000/api/v1" in openapi
+
+
+def test_capture_rest_contract_is_versioned_and_never_exposes_pairing_token() -> None:
+    contract = yaml.safe_load(
+        (ROOT / "contracts" / "api" / "openapi.yaml").read_text(encoding="utf-8")
+    )
+    paths = contract["paths"]
+    assert {
+        "/extension/status",
+        "/captures",
+        "/captures/{id}",
+        "/captures/{id}/abort",
+        "/raw-jobs",
+    } <= set(paths)
+    assert not any("pairing-token" in path for path in paths)
+    assert contract["security"] == [{"pairingToken": []}]
+
+
+def test_alembic_is_the_only_executable_migration_entry() -> None:
+    assert not list((ROOT / "migrations").glob("*.sql"))
+    assert not (ROOT / "services" / "api" / "app" / "migrate.py").exists()
+    assert (ROOT / "alembic.ini").is_file()
+    revisions = list((ROOT / "migrations" / "versions").glob("*.py"))
+    assert len(revisions) == 1
+    run_source = (ROOT / "services" / "api" / "run.py").read_text(encoding="utf-8")
+    assert "run_migrations" not in run_source
 
 
 def test_command_contract_has_no_forbidden_command_constants() -> None:

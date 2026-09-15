@@ -6,7 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /workspace
 
 COPY pyproject.toml ./
+COPY alembic.ini ./
 COPY services ./services
+COPY migrations ./migrations
 RUN pip install --no-cache-dir .
 
 RUN useradd --create-home --uid 10001 jobos

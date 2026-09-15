@@ -32,6 +32,57 @@ describe('site server', () => {
     await expect(response.json()).resolves.toMatchObject({ service: 'api', status: 'ok' })
   })
 
+  it('forwards POST method, body and content-type to the API', async () => {
+    const api = createServer((request, response) => {
+      const chunks = []
+      request.on('data', (chunk) => chunks.push(chunk))
+      request.on('end', () => {
+        response.writeHead(202, { 'Content-Type': 'application/json' })
+        response.end(
+          JSON.stringify({
+            method: request.method,
+            url: request.url,
+            contentType: request.headers['content-type'],
+            authorization: request.headers.authorization,
+            body: Buffer.concat(chunks).toString(),
+          }),
+        )
+      })
+    })
+    const apiPort = await listen(api)
+    const sitePort = await listen(
+      createSiteServer({
+        root: '/missing',
+        apiUpstream: `http://127.0.0.1:${apiPort}`,
+        apiToken: 'server-only-token',
+      }),
+    )
+
+    const response = await fetch(`http://127.0.0.1:${sitePort}/api/captures`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'list', delay_ms: 1800 }),
+    })
+
+    expect(response.status).toBe(202)
+    await expect(response.json()).resolves.toMatchObject({
+      method: 'POST',
+      url: '/api/v1/captures',
+      contentType: 'application/json',
+      authorization: 'Bearer server-only-token',
+      body: JSON.stringify({ kind: 'list', delay_ms: 1800 }),
+    })
+  })
+
+  it('does not accept a browser-supplied token when server credentials are absent', async () => {
+    const sitePort = await listen(createSiteServer({ root: '/missing' }))
+    const response = await fetch(`http://127.0.0.1:${sitePort}/api/captures`, {
+      headers: { Authorization: 'Bearer browser-token' },
+    })
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ code: 'PAIRING_TOKEN_UNAVAILABLE' })
+  })
+
   it('returns a structured gateway error when the API is unavailable', async () => {
     const sitePort = await listen(
       createSiteServer({ root: '/missing', apiUpstream: 'http://127.0.0.1:1' }),

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # 红线：采集并发恒为 1（env 以字符串传入，Literal 不做 str→int 强转，故用区间约束表达恒 1）
     capture_concurrency: int = Field(default=1, ge=1, le=1)
     detail_limit_per_batch: int = Field(default=30, ge=1)
+    database_url: str = "postgresql://jobos:jobos@127.0.0.1:5432/jobos"
     storage_dir: Path = Path("./data")
     chat_to_third_party: bool = False
 

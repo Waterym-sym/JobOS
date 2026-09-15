@@ -78,6 +78,7 @@ CREATE TABLE raw_job (
   fingerprint     text NOT NULL,
   list_json       jsonb,
   detail_json     jsonb,
+  list_url        text,
   jd_text         text,
   title           text,
   company         text,
@@ -88,10 +89,12 @@ CREATE TABLE raw_job (
   salary_unit     salary_unit NOT NULL DEFAULT 'unknown',
   exp_text        text,
   degree          text,
+  boss_name       text,
   industry        text,
   stage           text,
   scale           text,
   address         text,
+  company_desc    text,
   list_tags       text[] NOT NULL DEFAULT '{}',
   skill_tags      text[] NOT NULL DEFAULT '{}',
   ats_direct_post boolean,
@@ -108,6 +111,17 @@ CREATE TABLE raw_job (
 );
 CREATE INDEX idx_rawjob_fingerprint ON raw_job USING gin (to_tsvector('simple', fingerprint));
 CREATE INDEX idx_rawjob_active_at ON raw_job (active_at);
+
+-- Capture WS 收件箱：满足 ARCH-API-002 的事件 ID 持久化幂等；仅保存协议元数据，
+-- 不保存聊天原文或业务 payload。
+CREATE TABLE ws_event_inbox (
+  id              uuid PRIMARY KEY,
+  event_type      text NOT NULL,
+  capture_id      uuid,
+  received_at     timestamptz NOT NULL DEFAULT now(),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
 
 -- 既有 job 表扩展（v1.0 已存在，冻结时以 ALTER 落迁移）:
 --   ALTER TABLE job ADD COLUMN raw_job_id uuid REFERENCES raw_job(id);

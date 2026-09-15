@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,12 +12,38 @@ const contentTypes = {
   '.svg': 'image/svg+xml',
 }
 
-export function createSiteServer({ root = '/site', apiUpstream = 'http://api:8000' } = {}) {
+export function createSiteServer({
+  root = '/site',
+  apiUpstream = 'http://api:8000',
+  apiToken,
+  apiTokenFile,
+} = {}) {
   return createServer(async (request, response) => {
     const urlPath = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
     if (urlPath.startsWith('/api/')) {
       try {
-        const upstream = await fetch(new URL(urlPath.slice(4), apiUpstream))
+        const requestChunks = []
+        for await (const chunk of request) requestChunks.push(chunk)
+        const requestBody = Buffer.concat(requestChunks)
+        const proxyHeaders = new Headers()
+        const requestContentType = request.headers['content-type']
+        if (requestContentType) proxyHeaders.set('content-type', requestContentType)
+        const isHealth = urlPath === '/api/healthz'
+        if (!isHealth) {
+          const token = apiToken ?? (apiTokenFile ? (await readFile(apiTokenFile, 'utf8')).trim() : '')
+          if (!token) {
+            response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' })
+            response.end(JSON.stringify({ code: 'PAIRING_TOKEN_UNAVAILABLE' }))
+            return
+          }
+          proxyHeaders.set('authorization', `Bearer ${token}`)
+        }
+        const upstreamPath = isHealth ? '/healthz' : `/api/v1${urlPath.slice(4)}`
+        const upstream = await fetch(new URL(upstreamPath, apiUpstream), {
+          method: request.method,
+          headers: proxyHeaders,
+          body: requestBody.length ? requestBody : undefined,
+        })
         const body = Buffer.from(await upstream.arrayBuffer())
         response.writeHead(upstream.status, {
           'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
@@ -52,5 +78,9 @@ export function createSiteServer({ root = '/site', apiUpstream = 'http://api:800
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) {
-  createSiteServer({ apiUpstream: process.env.API_UPSTREAM }).listen(4173, '0.0.0.0')
+  createSiteServer({
+    apiUpstream: process.env.API_UPSTREAM,
+    apiToken: process.env.PAIRING_TOKEN,
+    apiTokenFile: process.env.PAIRING_TOKEN_FILE,
+  }).listen(4173, '0.0.0.0')
 }
