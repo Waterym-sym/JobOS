@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/ws/chat-event.schema.json",
+  "x-status": "v1",
+  "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §6",
+  "title": "chat.event payload",
+  "description": "聊天回采只做被动读取与解码。全部消息以 review_status=draft 入库，人工确认后才投影状态（ADR-012）。原始包加密存储于本机，外发请求中不得出现本结构内容（ADR-006）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["thread", "messages", "draft_classification", "confidence", "decode_source"],
+  "properties": {
+    "thread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ext_chat_id"],
+      "properties": {
+        "ext_chat_id": { "type": "string", "minLength": 1 },
+        "counterpart_name": { "type": "string" },
+        "job_ext_id": { "type": "string" }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/chatMessage" }
+    },
+    "draft_classification": {
+      "type": "string",
+      "enum": ["chat_replied", "interview_scheduled", "chat_rejected", "interview_rejected", "offered", "none"]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "decode_source": { "type": "string", "enum": ["network", "dom"] }
+  },
+  "$defs": {
+    "chatMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ext_msg_id", "direction", "type", "sent_at", "decode_source"],
+      "properties": {
+        "ext_msg_id": { "type": "string", "minLength": 1 },
+        "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+        "type": {
+          "type": "string",
+          "enum": ["text", "image", "voice", "video", "interview", "notify", "article", "action"]
+        },
+        "text_or_caption": { "type": "string" },
+        "structured": {
+          "type": "object",
+          "properties": {
+            "interview": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "time": { "type": "string" },
+                "place": { "type": "string" },
+                "round": { "type": "string" }
+              }
+            }
+          }
+        },
+        "sent_at": { "type": "string", "format": "date-time" },
+        "decode_source": { "type": "string", "enum": ["network", "dom"] },
+        "raw_ref": { "type": "string", "description": "本机加密原始包对象 key，非原文内容" }
+      }
+    }
+  }
+}

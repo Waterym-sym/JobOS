@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/dsl/workflow.schema.json",
+  "x-status": "v0-draft",
+  "x-doc": "docs/architecture/15-Workflow-DSL设计.md",
+  "title": "Workflow Definition DSL",
+  "description": "可恢复、版本冻结、可审计的 DAG。节点类型仅 task/human_approval/event_wait；并行与汇聚是 task 节点属性（parallel/join），条件由 when/depends_on 表达，不存在独立 parallel/condition/join 节点，v1.1 不提供 compensation 节点。静态门禁：handler 白名单注册，名称/元数据匹配 send|deliver|apply_external|next_page|upload 一律拒绝注册。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "input_schema", "nodes"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(@\\d+\\.\\d+)?$", "description": "如 boss_batch@1.0、job_to_package@1.0、retrospective@1.0" },
+    "version": { "type": "integer", "minimum": 1 },
+    "input_schema": { "type": "object" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_timeout_seconds": { "type": "integer", "minimum": 1 },
+        "max_concurrency": { "type": "integer", "minimum": 1 },
+        "data_classification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "max_tokens": { "type": "integer", "minimum": 1 },
+            "max_cost": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "type"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "type": { "enum": ["task", "human_approval", "event_wait"] },
+        "depends_on": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "when": { "type": "string", "description": "声明变量条件；false 记 skipped" },
+
+        "handler": { "type": "string", "description": "task 必填；白名单 handler，禁止名匹配 send|deliver|apply_external|next_page|upload" },
+        "input_mapping": { "type": "object" },
+        "output_key": { "type": "string" },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "retry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "backoff_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "on_failure": { "type": "string", "enum": ["fail", "retry", "continue_with_default", "goto"] },
+        "goto": { "type": "string", "description": "on_failure=goto 时使用，须通过循环检测" },
+        "idempotency_key": { "type": "string" },
+        "params": { "type": "object" },
+        "side_effect_level": { "type": "string", "enum": ["local_read", "local_write", "extension_command"] },
+        "data_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow_chat_raw": { "const": false, "description": "task 节点禁止直接取 chat_message 原文；聊天只能经 event_wait 消费 confirmed 事件" },
+            "third_party_allowed": { "type": "boolean", "default": true }
+          }
+        },
+        "parallel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items_path", "max_fanout"],
+          "properties": {
+            "items_path": { "type": "string" },
+            "max_fanout": { "type": "integer", "minimum": 1, "maximum": 8 }
+          }
+        },
+        "join": { "type": "string", "enum": ["all_success", "allow_partial"] },
+
+        "approver_policy": { "type": "string", "enum": ["owner"], "description": "human_approval 必填；v1.1 只有本人审批，超时不默认批准" },
+        "message_template": { "type": "string" },
+        "timeout_hours": { "type": "integer", "minimum": 1 },
+        "timeout_action": { "const": "cancel" },
+        "snapshot_fields": { "type": "array", "items": { "type": "string" } },
+
+        "event_name": { "type": "string", "description": "event_wait 必填，如 chat.event_received" },
+        "filter": { "type": "string", "description": "如 review_status == 'confirmed'" },
+        "timeout_policy": { "type": "string", "enum": ["keep_waiting", "fail", "continue_with_default"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "task" } }, "required": ["type"] },
+          "then": { "required": ["handler"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "human_approval" } }, "required": ["type"] },
+          "then": { "required": ["approver_policy", "timeout_action"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "event_wait" } }, "required": ["type"] },
+          "then": { "required": ["event_name"] }
+        },
+        {
+          "if": { "required": ["parallel"] },
+          "then": { "properties": { "type": { "const": "task" } } }
+        }
+      ]
+    }
+  }
+}

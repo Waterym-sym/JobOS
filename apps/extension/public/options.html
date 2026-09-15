@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JobOS 本机配对</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+        color: #14233a;
+        background: #e9eef5;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 360px; }
+      main { width: min(680px, calc(100% - 32px)); margin: 48px auto; }
+      .masthead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+      .mark { width: 10px; height: 34px; border-radius: 2px; background: #2864dc; }
+      .eyebrow { margin: 0 0 3px; color: #5d6d83; font: 700 11px/1.2 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+      h1 { margin: 0; font: 650 25px/1.2 "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: -.02em; }
+      .panel { overflow: hidden; border: 1px solid #cbd5e1; border-radius: 14px; background: #f8fafc; box-shadow: 0 18px 45px rgba(34, 52, 75, .11); }
+      .boundary { display: grid; grid-template-columns: 92px 1fr; gap: 16px; padding: 18px 22px; border-bottom: 1px solid #d7e0eb; background: #e1e9f4; }
+      .boundary strong { font: 700 12px/1.5 ui-monospace, monospace; color: #1b4e9b; letter-spacing: .05em; }
+      .boundary p { margin: 0; color: #43536a; font-size: 13px; line-height: 1.55; }
+      form { padding: 26px 22px 22px; }
+      label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 700; }
+      input { width: 100%; padding: 12px 13px; border: 1px solid #9eacc0; border-radius: 8px; background: white; color: #14233a; font: 14px/1.4 ui-monospace, monospace; }
+      input:focus { outline: 3px solid rgba(40, 100, 220, .2); border-color: #2864dc; }
+      .hint { margin: 8px 0 20px; color: #66758a; font-size: 12px; line-height: 1.5; }
+      button { border: 0; border-radius: 8px; padding: 11px 16px; background: #1d55bd; color: white; font-weight: 700; cursor: pointer; }
+      button:hover { background: #17479f; }
+      button:focus-visible { outline: 3px solid rgba(40, 100, 220, .28); outline-offset: 2px; }
+      .status-block { padding: 0 22px 24px; }
+      .status-label { display: block; margin-bottom: 7px; color: #66758a; font: 700 10px/1 ui-monospace, monospace; letter-spacing: .12em; }
+      #status { margin: 0; padding: 12px 13px; border-left: 3px solid #718096; background: #edf1f6; color: #3f4e62; font-size: 13px; line-height: 1.5; }
+      #status[data-state="paired"] { border-color: #16835a; background: #e7f5ef; color: #0e6242; }
+      #status[data-state="error"], #status[data-state="rejected"], #status[data-state="version_mismatch"] { border-color: #c2463a; background: #fbeceb; color: #8f3028; }
+      .endpoint { margin: 18px 0 0; color: #6a788b; font-size: 11px; }
+      .endpoint code { color: #33445b; font-family: ui-monospace, monospace; }
+      @media (max-width: 480px) {
+        main { margin: 24px auto; }
+        .boundary { grid-template-columns: 1fr; gap: 5px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="masthead">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">JobOS local bridge</p>
+          <h1>连接这台电脑</h1>
+        </div>
+      </header>
+      <section class="panel" aria-labelledby="pairing-title">
+        <div class="boundary">
+          <strong>本机边界</strong>
+          <p>配对令牌只保存在此浏览器中，并且只提交到 127.0.0.1。此扩展当前没有网页访问权限。</p>
+        </div>
+        <form id="pairing-form">
+          <label id="pairing-title" for="pairing-token">桌面端配对令牌</label>
+          <input id="pairing-token" type="password" minlength="16" autocomplete="off" spellcheck="false" required />
+          <p class="hint">从 JobOS 桌面端复制令牌。保存后，扩展只尝试连接一次；配置变更时会再次尝试。</p>
+          <button type="submit">保存并连接</button>
+          <p class="endpoint">固定端点：<code id="endpoint"></code></p>
+        </form>
+        <div class="status-block" aria-live="polite">
+          <span class="status-label">PAIRING STATUS</span>
+          <p id="status">正在读取状态…</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./options.js"></script>
+  </body>
+</html>

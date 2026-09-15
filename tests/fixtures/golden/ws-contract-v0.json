@@ -1,0 +1,58 @@
+{
+  "dataset_version": "0.1.0",
+  "classification": "synthetic",
+  "cases": [
+    {
+      "id": "auth-ping-valid",
+      "schema": "handshake.schema.json",
+      "expected": "valid",
+      "payload": {
+        "v": 1,
+        "kind": "handshake",
+        "id": "trace-001",
+        "type": "auth_ping",
+        "payload": {
+          "token": "synthetic-token-0001",
+          "extension_version": "0.1.0",
+          "protocol_version": 1
+        }
+      }
+    },
+    {
+      "id": "capture-list-manual-page-only",
+      "schema": "commands.schema.json",
+      "expected": "valid",
+      "payload": {
+        "v": 1,
+        "kind": "command",
+        "id": "trace-002",
+        "command_id": "command-002",
+        "capture_id": "capture-001",
+        "type": "capture_list",
+        "payload": {
+          "max_items": 20,
+          "delay_ms": 1800,
+          "auto_next_page": false
+        }
+      }
+    },
+    {
+      "id": "capture-phase-valid",
+      "schema": "events.schema.json",
+      "expected": "valid",
+      "payload": {
+        "v": 1,
+        "kind": "event",
+        "id": "trace-003",
+        "type": "capture.phase",
+        "capture_id": "capture-001",
+        "payload": {
+          "phase": "list",
+          "done": 1,
+          "total": 10,
+          "current": "synthetic-job-001"
+        }
+      }
+    }
+  ]
+}

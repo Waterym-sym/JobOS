@@ -1,0 +1,19 @@
+{
+  "name": "@jobos/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.304",
+    "@types/node": "22.10.10",
+    "typescript": "5.7.3",
+    "vite": "6.1.0",
+    "vitest": "2.1.8"
+  }
+}

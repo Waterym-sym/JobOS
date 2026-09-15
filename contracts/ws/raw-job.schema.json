@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/ws/raw-job.schema.json",
+  "x-status": "v1",
+  "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §5",
+  "title": "RawJob upsert payload (job.captured list tier / job.updated detail tier)",
+  "description": "列表与详情两档合并写入 raw_job；原始 list_json/detail_json 全量保留，禁止用解析结果覆盖。薪资解析在服务端完成，扩展只传原文与可得数值。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "ext_id", "tier"],
+  "properties": {
+    "source": { "const": "boss" },
+    "ext_id": { "type": "string", "minLength": 1 },
+    "tier": { "type": "string", "enum": ["list", "detail"] },
+    "batch_id": { "type": "string" },
+    "fingerprint": { "type": "string", "description": "hash(normalize(title)+normalize(company)+normalize(jd_text 前 N 字))，可由服务端重算" },
+    "list_url": { "type": "string" },
+
+    "title": { "type": "string" },
+    "company": { "type": "string" },
+    "city": { "type": "string" },
+    "salary_text": { "type": "string" },
+    "low_salary": { "type": ["number", "null"] },
+    "high_salary": { "type": ["number", "null"] },
+    "salary_unit": {
+      "type": "string",
+      "enum": ["month_K", "month_yuan", "day", "hour", "year", "unknown"]
+    },
+    "exp_text": { "type": "string" },
+    "degree": { "type": "string" },
+    "list_tags": { "type": "array", "items": { "type": "string" } },
+    "boss_name": { "type": ["string", "null"] },
+
+    "jd_text": { "type": "string" },
+    "skill_tags": { "type": "array", "items": { "type": "string" } },
+    "industry": { "type": "string" },
+    "stage": { "type": "string" },
+    "scale": { "type": "string" },
+    "address": { "type": "string" },
+    "company_desc": { "type": "string" },
+    "active_time": { "type": "string", "description": "原文，如「3天内活跃」「刚刚」" },
+    "active_at": { "type": ["string", "null"], "format": "date-time" },
+    "ats_direct_post": { "type": "boolean" },
+    "boss_json": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "is_headhunter": { "type": "boolean" },
+        "is_friend": { "type": "boolean" },
+        "has_interview": { "type": "boolean" },
+        "is_gold_interviewer": { "type": "boolean" }
+      }
+    },
+
+    "list_json": { "type": "object", "description": "列表行完整原始 JSON" },
+    "detail_json": { "type": "object", "description": "详情接口完整原始 JSON" },
+    "captured_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "tier": { "const": "list" } }, "required": ["tier"] },
+      "then": { "required": ["title", "company"] }
+    }
+  ]
+}

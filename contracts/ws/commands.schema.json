@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/ws/commands.schema.json",
+  "x-status": "v1",
+  "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §3",
+  "title": "Server -> Extension Business Commands (6)",
+  "description": "全集仅 6 个业务命令；auth_ping/auth_pong 使用独立 handshake 契约。禁止注册 send_message/deliver/auto_apply/auto_greet/auto_next_page/auto_upload（ADR-009，静态门禁与契约测试双保险）。",
+  "oneOf": [
+    { "$ref": "#/$defs/captureList" },
+    { "$ref": "#/$defs/captureDetails" },
+    { "$ref": "#/$defs/abort" },
+    { "$ref": "#/$defs/fillOnlineResume" },
+    { "$ref": "#/$defs/copyGreeting" },
+    { "$ref": "#/$defs/captureChat" }
+  ],
+  "$defs": {
+    "baseCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "kind", "id", "type", "command_id", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "command" },
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "command_id": { "type": "string" },
+        "capture_id": { "type": ["string", "null"] },
+        "ts": { "type": "string", "format": "date-time" },
+        "payload": { "type": "object" }
+      }
+    },
+    "captureList": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "capture_list" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["max_items", "delay_ms", "auto_next_page"],
+              "properties": {
+                "query_url": { "type": "string" },
+                "list_params": { "type": "object" },
+                "max_items": { "type": "integer", "minimum": 1, "maximum": 500 },
+                "delay_ms": { "type": "integer", "minimum": 1800, "description": "硬下限 1800ms + ±20% 抖动" },
+                "auto_next_page": { "const": false, "description": "恒为 false；翻页只由用户手动操作后继续采集" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "captureDetails": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "capture_details" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ext_ids", "detail_limit", "delay_ms"],
+              "properties": {
+                "ext_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                "detail_limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "delay_ms": { "type": "integer", "minimum": 1800 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "abort": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "abort" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["reason"],
+              "properties": { "reason": { "type": "string" } }
+            }
+          }
+        }
+      ]
+    },
+    "fillOnlineResume": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "fill_online_resume" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["application_id", "preflight", "payload"],
+              "description": "仅四模块；扩展先回填预览并逐模块高亮，必须当场人工确认才写入 DOM。company/title/起止时间/学历为红线字段，禁止出现在载荷中。",
+              "properties": {
+                "application_id": { "type": "string", "format": "uuid" },
+                "preflight": { "type": "boolean", "const": true },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["advantage", "work_experiences", "projects", "skills"],
+                  "properties": {
+                    "advantage": { "type": "string", "maxLength": 1000 },
+                    "work_experiences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "responsibility": { "type": "string" },
+                          "achievements": { "type": "string" }
+                        }
+                      }
+                    },
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "description": { "type": "string" },
+                          "highlights": { "type": "string" }
+                        }
+                      }
+                    },
+                    "skills": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "copyGreeting": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "copy_greeting" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["variant_id", "text", "target"],
+              "properties": {
+                "variant_id": { "type": "string", "format": "uuid" },
+                "text": { "type": "string", "minLength": 1, "maxLength": 300 },
+                "target": { "type": "string", "enum": ["clipboard", "draft_input"], "description": "只写剪贴板或输入框草稿；协议不存在 send" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "captureChat": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "capture_chat" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limit"],
+              "properties": {
+                "thread_ids": { "type": "array", "items": { "type": "string" } },
+                "since_cursor": { "type": "string" },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

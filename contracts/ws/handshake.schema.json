@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/ws/handshake.schema.json",
+  "x-status": "v1",
+  "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §2",
+  "title": "Extension WebSocket Handshake",
+  "description": "连接第一帧由扩展提交 auth_ping；鉴权与协议协商成功后服务端返回 auth_pong。握手成功前禁止业务消息。",
+  "oneOf": [
+    { "$ref": "#/$defs/authPing" },
+    { "$ref": "#/$defs/authPong" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "kind", "id", "type", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "handshake" },
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "ts": { "type": "string", "format": "date-time" },
+        "payload": { "type": "object" }
+      }
+    },
+    "authPing": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "auth_ping" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["token", "extension_version", "protocol_version"],
+              "properties": {
+                "token": { "type": "string", "minLength": 16 },
+                "extension_version": { "type": "string", "minLength": 1 },
+                "protocol_version": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "authPong": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "auth_pong" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["supported", "min_version"],
+              "properties": {
+                "supported": { "type": "boolean" },
+                "min_version": { "const": 1 },
+                "extension_instance_id": { "type": "string" },
+                "upgrade_url": { "type": "string", "format": "uri" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

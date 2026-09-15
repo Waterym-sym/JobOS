@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/ws/protocol.schema.json",
+  "x-status": "v1",
+  "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §2-4",
+  "title": "WS Envelope v1 (127.0.0.1:8788/ws)",
+  "description": "扩展与主系统之间唯一的 WebSocket 信封。协议中不存在 send/deliver/auto_apply/auto_next_page 类消息（ADR-009）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "kind", "id", "type", "payload"],
+  "properties": {
+    "v": { "const": 1 },
+    "kind": { "type": "string", "enum": ["handshake", "command", "event", "receipt"] },
+    "id": { "type": "string", "description": "消息唯一 ID（UUIDv7），兼作 trace id" },
+    "type": { "type": "string" },
+    "capture_id": { "type": ["string", "null"] },
+    "command_id": { "type": ["string", "null"] },
+    "ts": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" }
+  },
+  "$defs": {
+    "receipt": {
+      "title": "命令执行回执",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "type", "command_id", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "receipt" },
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["command.started", "command.progress", "command.completed", "command.error"]
+        },
+        "command_id": { "type": "string" },
+        "capture_id": { "type": ["string", "null"] },
+        "ts": { "type": "string", "format": "date-time" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "recoverable": { "type": "boolean" },
+            "risk": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "errorEnvelope": {
+      "title": "统一错误信封（REST/WS 通用）",
+      "type": "object",
+      "required": ["code", "message", "trace_id"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "trace_id": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

@@ -1,0 +1,302 @@
+openapi: 3.1.0
+info:
+  title: AI Resume OS / JobOS Local API
+  version: 1.0.0
+  x-status: v1
+  x-doc: docs/architecture/13-API接口设计.md
+  description: >
+    本地单机 REST 骨架（核心路径；全量 CRUD 于 P0 补齐，勿当完整 API）。
+    仅绑定 127.0.0.1；鉴权为本地配对 token（Bearer），无 OAuth/RLS。
+    WebSocket（扩展专用）契约见 ../ws/，不在本文件。
+servers:
+  - url: http://127.0.0.1:8000/api/v1
+    description: 本机 Docker Compose
+security:
+  - pairingToken: []
+tags:
+  - name: capture
+  - name: screening
+  - name: shortlist
+  - name: package
+  - name: events
+  - name: retrospective
+  - name: template
+components:
+  securitySchemes:
+    pairingToken:
+      type: http
+      scheme: bearer
+      description: 本机首启生成的配对 token；仅接受 loopback 来源与扩展 Origin
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      schema: { type: string }
+    IfMatch:
+      in: header
+      name: If-Match
+      schema: { type: string }
+  responses:
+    Error:
+      description: 统一错误信封
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, trace_id]
+      properties:
+        code:
+          type: string
+          enum:
+            - PAIRING_TOKEN_INVALID
+            - LOOPBACK_ONLY
+            - EXTENSION_VERSION_MISMATCH
+            - CAPTURE_RISK_HALTED
+            - SCREEN_RULE_INVALID
+            - SHORTLIST_CONFLICT
+            - GREETING_UNSUPPORTED
+            - PAYLOAD_REDLINE
+            - TEMPLATE_DRIFT
+            - TEMPLATE_WRONG_CHANNEL
+            - TEMPLATE_LICENSE_REJECTED
+            - DOCX_IMPORT_FAILED
+            - CHAT_DECODE_DEGRADED
+            - EVENT_ALREADY_CONFIRMED
+            - RETROSPECTIVE_NOT_TERMINAL
+            - VERSION_CONFLICT
+            - RESUME_UNSUPPORTED_CLAIM
+            - WORKFLOW_NOT_APPROVABLE
+            - BUDGET_EXCEEDED
+        message: { type: string }
+        trace_id: { type: string }
+        details: { type: object }
+    BatchRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [boss] }
+        kind: { type: string, enum: [list, detail, chat] }
+        status: { type: string, enum: [queued, running, completed, aborted, risk_halted, failed] }
+        stats: { type: object }
+        risk_halted: { type: boolean }
+    ScreenResult:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        filter_set_id: { type: string, format: uuid }
+        filter_version: { type: integer }
+        raw_job_id: { type: string, format: uuid }
+        verdict: { type: string, enum: [pass, reject, recovered] }
+        reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_id: { type: string }
+              group: { type: string }
+              field: { type: string }
+              operator: { type: string }
+              expected: {}
+              actual: {}
+    Shortlist:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        job_id: { type: string, format: uuid }
+        status: { type: string, enum: [confirmed, removed] }
+        note: { type: string }
+    ApplicationPackage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        application_id: { type: string, format: uuid }
+        status: { type: string, enum: [draft, ready, used] }
+        online_payload: { type: object }
+        ats_version_id: { type: [string, 'null'], format: uuid }
+        showcase_version_id: { type: [string, 'null'], format: uuid }
+    GreetingVariant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        variant_no: { type: integer }
+        text: { type: string, maxLength: 300 }
+        evidence_ids: { type: array, items: { type: string, format: uuid } }
+        status: { type: string, enum: [generated, blocked, selected, used] }
+    ApplicationEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [shortlisted, packaged, greeted, chat_read, chat_replied, chat_rejected,
+                 interview_scheduled, interview_done, interview_rejected, offered, withdrawn]
+        source: { type: string, enum: [extension, manual] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        review_status: { type: string, enum: [draft, confirmed, rejected] }
+    Retrospective:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [single, stage] }
+        content: { type: object }
+        version: { type: integer }
+    StrategySuggestion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scope: { type: string, enum: [screen, greeting, resume, template] }
+        content: { type: object }
+        status: { type: string, enum: [proposed, approved, rejected, applied] }
+    ResumeTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        channel: { type: string, enum: [ats, showcase] }
+        layout_type: { type: string, pattern: '^P(0[1-9]|1[0-9]|2[0-3])$' }
+        style_preset: { type: string, pattern: '^S(0[1-9]|[12][0-9]|3[0-4])$' }
+        license: { type: string }
+        source: { type: string, enum: [builtin, docx_import, user_copy] }
+        quality_grade: { type: string, enum: [A, B, C] }
+paths:
+  /captures:
+    post:
+      tags: [capture]
+      summary: 创建采集批次（人工触发；服务端下发 WS 命令给扩展）
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '202':
+          description: 已排队
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchRun' }
+        '403': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [capture]
+      summary: 批次列表
+      responses:
+        '200': { description: ok }
+  /captures/{id}/abort:
+    post:
+      tags: [capture]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: aborted }
+        '409': { $ref: '#/components/responses/Error' }
+  /raw-jobs:
+    get:
+      tags: [capture]
+      summary: 岗位池（cursor 分页，不含聊天/证据原文）
+      responses:
+        '200': { description: ok }
+  /filter-sets:
+    post:
+      tags: [screening]
+      summary: 创建/版本化 Filter Set（rule_json 形状见 ../../filters/filter-set.schema.json）
+      responses:
+        '201': { description: created }
+        '422': { $ref: '#/components/responses/Error' }
+  /filter-sets/{id}/run:
+    post:
+      tags: [screening]
+      summary: 运行 Stage-0 纯规则筛选（零 LLM），逐岗写原因
+      responses:
+        '202': { description: screening queued }
+  /screen-results/{id}/recover:
+    post:
+      tags: [screening]
+      summary: 人工捞回被淘汰岗位
+      responses:
+        '200': { description: recovered }
+  /shortlists:
+    post:
+      tags: [shortlist]
+      summary: 人工确认岗位进入候选区（候选区是唯一投递入口）
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shortlist' }
+        '409':
+          description: SHORTLIST_CONFLICT 同批重复确认
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /applications/{id}/package:
+    post:
+      tags: [package]
+      summary: 生成投递包（三形态简历 + 招呼语 A/B + Guard 校验）
+      responses:
+        '202': { description: packaging queued }
+        '422': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [package]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationPackage' }
+  /applications/{id}/mark-greeted:
+    post:
+      tags: [package]
+      summary: 人工回执已发送（系统不代发；或由确认后的聊天事件生成草稿）
+      responses:
+        '200': { description: recorded }
+  /events/drafts:
+    get:
+      tags: [events]
+      summary: 事件确认台：列出 review_status=draft 的回采事件
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApplicationEvent' }
+  /events/{id}:confirm:
+    post:
+      tags: [events]
+      summary: 人工确认/修正草稿事件，confirmed 后才投影状态
+      responses:
+        '200': { description: confirmed }
+        '409': { $ref: '#/components/responses/Error' }
+  /applications/{id}/retrospectives:
+    post:
+      tags: [retrospective]
+      summary: 生成单岗复盘（岗位须终态；聊天上下文本机/脱敏）
+      responses:
+        '202': { description: queued }
+        '422': { $ref: '#/components/responses/Error' }
+  /retrospectives/stage:
+    post:
+      tags: [retrospective]
+      summary: 阶段汇总（漏斗、拒绝原因、A/B 与模板效果）
+      responses:
+        '202': { description: queued }
+  /strategy-suggestions/{id}:review:
+    post:
+      tags: [retrospective]
+      summary: 审核策略建议（approved 不触发任何自动参数变更，applied 由人工落实）
+      responses:
+        '200': { description: reviewed }
+  /templates:
+    get:
+      tags: [template]
+      summary: 模板库（按 channel/layout/style/tags 过滤）
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResumeTemplate' }
+  /templates/imports:
+    post:
+      tags: [template]
+      summary: DOCX 批量导入（开源解析，断点续跑，逐条失败报告；license 必填）
+      responses:
+        '202': { description: import queued }
+        '422': { $ref: '#/components/responses/Error' }

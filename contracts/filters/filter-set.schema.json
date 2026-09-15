@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-resume-os.local/contracts/filters/filter-set.schema.json",
+  "x-status": "v0-draft",
+  "x-doc": "docs/architecture/08-Matching-Engine技术方案.md Stage-0",
+  "title": "FilterSet.rule_json (Stage-0 deterministic screening)",
+  "description": "八组纯规则，零 LLM 调用；每条规则有稳定 rule_id、启用开关、参数与 verdict。任何 reject 可人工 recover。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hard", "company", "jd_content", "dedup", "activity", "social", "commute", "optional_ai"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "hard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cities": { "type": "array", "items": { "type": "string" } },
+        "allow_remote": { "type": "boolean", "default": true },
+        "salary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_month_k": { "type": "number", "minimum": 0 },
+            "unknown_action": { "type": "string", "enum": ["flag", "pass"], "default": "flag" }
+          }
+        },
+        "degree": { "type": "array", "items": { "type": "string" } },
+        "exp_years_max": { "type": "integer", "minimum": 0 },
+        "title_whitelist": { "type": "array", "items": { "type": "string" } },
+        "title_blacklist": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "company": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "industries_include": { "type": "array", "items": { "type": "string" } },
+        "industries_exclude": { "type": "array", "items": { "type": "string" } },
+        "stages": { "type": "array", "items": { "type": "string" } },
+        "scales": { "type": "array", "items": { "type": "string" } },
+        "company_blacklist": { "type": "array", "items": { "type": "string" } },
+        "reject_headhunter": { "type": "boolean", "default": true },
+        "boss_title_whitelist": { "type": "array", "items": { "type": "string" } },
+        "boss_title_blacklist": { "type": "array", "items": { "type": "string" } },
+        "gold_interviewer_flag_only": { "type": "boolean", "default": true, "description": "金牌面试官只加权 flag，不默认淘汰" }
+      }
+    },
+    "jd_content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keyword_whitelist": { "type": "array", "items": { "type": "string" } },
+        "keyword_blacklist": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["term"],
+            "properties": {
+              "term": { "type": "string" },
+              "negation_aware": { "type": "boolean", "default": true },
+              "exclude_tool_suffix": { "type": "boolean", "default": true }
+            }
+          }
+        },
+        "required_skills": {
+          "type": "object",
+          "properties": {
+            "match": { "type": "string", "enum": ["any", "all", "all_n"] },
+            "n": { "type": "integer", "minimum": 1 },
+            "synonyms": { "type": "object" }
+          }
+        },
+        "jd_min_chars": { "type": "integer", "minimum": 0, "default": 30 },
+        "max_published_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "dedup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude_contacted_within_days": { "type": "integer", "minimum": 1, "default": 30 },
+        "fingerprint_dedup": { "type": "boolean", "default": true },
+        "exclude_friend_posted": { "type": "boolean", "default": true }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reject_after_days"],
+      "properties": {
+        "reject_after_days": { "type": "integer", "minimum": 1, "default": 30 },
+        "buckets": {
+          "type": "array",
+          "description": "活跃分档：解析「刚刚/今天/N天内/月内/半年/更久」",
+          "items": {
+            "type": "object",
+            "required": ["label", "max_days"],
+            "properties": {
+              "label": { "type": "string" },
+              "max_days": { "type": "integer", "minimum": 0 },
+              "verdict": { "type": "string", "enum": ["pass", "flag", "reject"] }
+            }
+          }
+        }
+      }
+    },
+    "social": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude_same_hr_duplicate": { "type": "boolean", "default": true },
+        "exclude_already_friend": { "type": "boolean", "default": true }
+      }
+    },
+    "commute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "amap_key_configured": { "type": "boolean", "default": false },
+        "max_commute_minutes": { "type": "integer", "minimum": 1 },
+        "missing_data_action": { "type": "string", "enum": ["skip"], "default": "skip", "description": "未配 Key 或地址缺失：skip 不淘汰" }
+      }
+    },
+    "optional_ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "默认关；开启后仅作边界条件，AI 永不覆盖规则 verdict" },
+        "model_policy": { "type": "string", "enum": ["small_local", "configured"] }
+      }
+    }
+  }
+}

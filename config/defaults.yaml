@@ -1,0 +1,9 @@
+host_bind: 127.0.0.1
+api_port: 8000
+ws_port: 8788
+pairing_token_file: config/.local/pairing.token
+capture_min_delay_ms: 1800
+capture_concurrency: 1
+detail_limit_per_batch: 30
+storage_dir: ./data
+chat_to_third_party: false

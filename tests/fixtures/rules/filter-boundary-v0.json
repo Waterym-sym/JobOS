@@ -1,0 +1,25 @@
+{
+  "dataset_version": "0.1.0",
+  "classification": "synthetic",
+  "filter_set": {
+    "schema_version": 1,
+    "hard": {
+      "cities": ["上海"],
+      "allow_remote": true,
+      "salary": { "min_month_k": 20, "unknown_action": "flag" }
+    },
+    "company": { "reject_headhunter": true, "gold_interviewer_flag_only": true },
+    "jd_content": { "jd_min_chars": 30 },
+    "dedup": { "fingerprint_dedup": true },
+    "activity": { "reject_after_days": 30 },
+    "social": { "exclude_already_friend": true },
+    "commute": { "enabled": false, "amap_key_configured": false, "missing_data_action": "skip" },
+    "optional_ai": { "enabled": false }
+  },
+  "cases": [
+    { "id": "salary-at-boundary", "salary_text": "20-30K", "expected": "pass" },
+    { "id": "salary-unit-unknown", "salary_text": "面议", "expected": "flag" },
+    { "id": "activity-at-boundary", "active_days": 30, "expected": "pass" },
+    { "id": "activity-past-boundary", "active_days": 31, "expected": "reject" }
+  ]
+}
