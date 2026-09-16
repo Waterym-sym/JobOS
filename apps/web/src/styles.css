@@ -105,9 +105,14 @@ code, .mono-label, .context-code, .status-table code { font-family: "JetBrains M
 .page-heading > p:last-child { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; line-height: 22px; }
 
 .sheet, .desk-list, .empty-state { border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--sheet); }
+.sheet-stack { display: grid; gap: 16px; }
+.sheet-stack > .form-message { padding: 0 4px; }
 .sheet-heading { min-height: 64px; padding: 12px 16px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .sheet-heading .mono-label { margin-bottom: 1px; }
 .sheet-heading h2, .desk-header h2, .empty-state h2, .context-rail h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.heading-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.heading-actions .primary-action { border: 0; cursor: pointer; }
+.heading-actions .primary-action:disabled { opacity: .5; cursor: default; }
 .status-pill { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; color: var(--hold); background: var(--hold-soft); display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; }
 .status-pill.confirmed { color: var(--evidence); background: var(--evidence-soft); }
 .status-pill.neutral { color: var(--ink-2); background: var(--canvas-inset); }
@@ -146,10 +151,7 @@ code, .mono-label, .context-code, .status-table code { font-family: "JetBrains M
 .context-code code { font-size: 12.5px; }
 
 /* ---------------- capture console ---------------- */
-.capture-body { padding: 16px; display: grid; gap: 16px; }
-.capture-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
 .field { display: grid; gap: 5px; }
-.field.full { grid-column: 1 / -1; }
 .field > label { color: var(--ink-2); font-size: 12px; font-weight: 500; }
 .field input {
   width: 100%; min-height: 34px; padding: 6px 10px;
@@ -157,17 +159,12 @@ code, .mono-label, .context-code, .status-table code { font-family: "JetBrains M
   color: var(--ink); background: var(--sheet); font-size: 13px; outline: none;
 }
 .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.kind-toggle { display: inline-flex; border: 1px solid var(--hairline-strong); border-radius: var(--radius); overflow: hidden; }
-.kind-toggle button { min-height: 32px; padding: 4px 14px; border: 0; background: var(--sheet); color: var(--ink-2); font-size: 13px; cursor: pointer; }
-.kind-toggle button.active { background: var(--accent); color: var(--primary-fg); }
-.capture-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.capture-actions .primary-action { border: 0; cursor: pointer; }
-.capture-actions .primary-action:disabled { opacity: .5; cursor: default; }
-.capture-actions .ghost {
+.ghost {
   min-height: 32px; padding: 6px 12px; border: 1px solid var(--hairline-strong);
   border-radius: var(--radius); background: var(--sheet); color: var(--ink-2); font-size: 13px; cursor: pointer;
 }
-.capture-actions .ghost.danger { color: var(--danger); border-color: var(--danger); }
+.ghost:disabled { opacity: .5; cursor: default; }
+.ghost.danger { color: var(--danger); border-color: var(--danger); }
 .form-message { margin: 0; font-size: 12.5px; line-height: 19px; color: var(--ink-2); }
 .form-message.error { color: var(--danger); }
 .raw-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -176,15 +173,192 @@ code, .mono-label, .context-code, .status-table code { font-family: "JetBrains M
 .raw-table td.mono, .raw-table th.mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; color: var(--ink-2); }
 .tag-micro { padding: 1px 7px; border-radius: 999px; background: var(--canvas-inset); color: var(--ink-3); font-size: 11px; }
 
+/* ---------------- job pool ---------------- */
+.sheet-body { padding: 16px; display: grid; gap: 12px; }
+.field select {
+  width: 100%; min-height: 34px; padding: 6px 10px;
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius);
+  color: var(--ink); background: var(--sheet); font-size: 13px; outline: none;
+}
+.field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; }
+.filter-row .field { min-width: 92px; flex: 0 1 92px; }
+.filter-row .field:first-child { min-width: 170px; flex: 1 1 170px; }
+.filter-row .field > label { font-size: 11px; }
+.filter-row input, .filter-row select { min-height: 30px; padding: 4px 8px; font-size: 12.5px; }
+.check-inline { min-height: 30px; white-space: nowrap; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.queue-strip {
+  margin: 16px; padding: 10px 12px; border: 1px solid var(--hairline); border-left: 2px solid var(--accent);
+  border-radius: var(--radius); background: var(--canvas-inset); display: flex; align-items: center; gap: 10px;
+}
+.queue-strip.paused { border-left-color: var(--seal); background: var(--seal-soft); }
+.queue-strip strong { font-size: 13px; font-weight: 500; }
+.queue-strip p { margin: 2px 0 0; color: var(--ink-2); font-size: 12.5px; }
+.queue-strip .ghost, .queue-strip .tag-micro { margin-left: auto; }
+.enrich-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 12px; }
+.enrich-badge span { font-size: 9px; }
+.enrich-badge.done { color: var(--evidence); }
+.enrich-badge.pending, .enrich-badge.detail_done { color: var(--hold); }
+.enrich-badge.failed { color: var(--danger); }
+
+/* ---------------- job detail panel (两栏) ---------------- */
+.raw-table tbody tr.selectable { cursor: pointer; }
+.raw-table tbody tr.selectable:hover td { background: var(--canvas-inset); }
+.raw-table tbody tr.selected td { background: var(--accent-soft); }
+.jobs-split { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.jobs-split.with-detail { grid-template-columns: minmax(0, 1.65fr) minmax(340px, 1fr); }
+.jobs-split.with-detail .job-detail { border-left: 1px solid var(--hairline); }
+.job-detail {
+  position: sticky; top: 64px; max-height: calc(100vh - 88px); overflow: auto;
+  padding: 14px 16px 20px; display: grid; gap: 14px; align-content: start;
+  scrollbar-width: thin;
+}
+.job-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.job-detail-head h3 { margin: 0; font-size: 14px; line-height: 21px; font-weight: 600; }
+.job-detail-head .mono-label { margin-bottom: 1px; }
+.job-detail-tools { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
+.detail-sub { margin: 3px 0 0; color: var(--ink-3); font-size: 12px; line-height: 18px; }
+.detail-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.detail-facts > div { min-width: 0; display: grid; gap: 1px; }
+.detail-facts > div.full { grid-column: 1 / -1; }
+.detail-facts dt { color: var(--ink-3); font-size: 11px; line-height: 16px; }
+.detail-facts dd { margin: 0; color: var(--ink); font-size: 12.5px; line-height: 19px; }
+.detail-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.detail-block { display: grid; gap: 6px; }
+.detail-block .mono-label { margin-bottom: 0; }
+.jd-text, .detail-text {
+  margin: 0; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: var(--canvas-inset); color: var(--ink-2); font-size: 12.5px; line-height: 20px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.jd-text { max-height: 320px; overflow: auto; }
+.detail-sections { display: grid; gap: 10px; }
+.detail-sections > section { display: grid; gap: 4px; }
+.detail-sections .mono-label { margin-bottom: 0; }
+.detail-text { max-height: 200px; overflow: auto; }
+
+/* ---------------- screening pool (职位详情卡 + 评分栏) ---------------- */
+.page-grid.no-context-rail { grid-template-columns: minmax(0, 1fr); }
+.page-grid.no-context-rail .context-rail { display: none; }
+.screening-split { display: grid; align-items: start; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.screening-main { min-width: 0; display: grid; gap: 12px; align-content: start; }
+.screening-assess { min-width: 0; display: grid; gap: 12px; align-content: start; }
+
+.dossier { display: grid; gap: 12px; }
+.dossier-head {
+  padding: 16px; border: 1px solid var(--hairline); border-left: 2px solid var(--accent);
+  border-radius: var(--radius-lg); background: var(--sheet); display: grid; gap: 8px;
+}
+.dossier-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dossier-head-top h2 { margin: 0; font-size: 13px; line-height: 20px; font-weight: 600; }
+.dossier-title { margin: 2px 0 0; font-size: 22px; line-height: 30px; font-weight: 600; }
+.dossier-origin { display: flex; align-items: baseline; gap: 8px 20px; flex-wrap: wrap; color: var(--ink-2); font-size: 12.5px; }
+.dossier-origin .mono-label { margin: 0; }
+.dossier-actions { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 8px; }
+.dossier-actions .ghost { min-height: 32px; }
+.dossier-block {
+  padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  background: var(--sheet); display: grid; gap: 10px;
+}
+.dossier-block > h3, .section-card > h3 {
+  margin: 0; padding-left: 10px; border-left: 4px solid var(--accent);
+  font-size: 15px; line-height: 22px; font-weight: 700;
+}
+.section-card {
+  padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  background: var(--sheet); display: grid; gap: 10px;
+}
+.section-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: dossier-item; }
+.section-list li {
+  position: relative; padding-left: 28px; color: var(--ink);
+  font-size: 13.5px; line-height: 22px; counter-increment: dossier-item;
+}
+.section-list li::before {
+  content: counter(dossier-item); position: absolute; left: 0; top: 2px;
+  width: 19px; height: 19px; border-radius: 50%;
+  background: var(--accent); color: var(--primary-fg);
+  display: grid; place-items: center; font-size: 11px; font-weight: 600;
+}
+.section-paragraph { margin: 0; color: var(--ink); font-size: 13.5px; line-height: 22px; }
+.overview-table, .fact-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.overview-table th, .overview-table td, .fact-table th, .fact-table td {
+  padding: 8px 10px; border: 1px solid var(--hairline); text-align: left; vertical-align: top;
+}
+.overview-table th, .fact-table th {
+  width: 88px; color: var(--ink-3); font-weight: 500; background: var(--canvas-inset);
+}
+.archive { display: grid; gap: 8px; }
+.archive-block { border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--sheet); }
+.archive-block > summary {
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; list-style: none;
+}
+.archive-block > summary::-webkit-details-marker { display: none; }
+.archive-block > summary .mono-label { margin: 0; }
+.archive-block > summary::after { content: "▸"; margin-left: auto; color: var(--ink-3); font-size: 11px; }
+.archive-block[open] > summary::after { content: "▾"; }
+.archive-body {
+  padding: 0 16px 16px; border-top: 1px solid var(--hairline);
+  display: grid; gap: 10px; align-content: start;
+}
+.archive-body .detail-text { max-height: 320px; }
+.recruiter-list { display: grid; gap: 8px; }
+.recruiter-item {
+  padding: 8px 10px; border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: var(--canvas-inset); display: grid; gap: 2px;
+}
+.recruiter-id { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.recruiter-id strong { font-size: 13px; font-weight: 600; }
+.recruiter-title { color: var(--ink-2); font-size: 12.5px; }
+.recruiter-id .mono-label { margin: 0 0 0 auto; color: var(--ink-3); }
+.recruiter-note { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 18px; }
+.executive { display: grid; gap: 8px; }
+.executive-id { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.executive-id strong { font-size: 13.5px; font-weight: 600; }
+.executive-id .mono-label { margin: 0; }
+
+.assess-panel {
+  padding: 14px; border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  background: var(--sheet); display: grid; gap: 12px; align-content: start;
+}
+.assess-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.assess-head h2 { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
+.assess-head .mono-label { margin-bottom: 1px; }
+.assess-score { display: grid; gap: 14px; }
+.assess-ring {
+  justify-self: center; width: 132px; height: 132px; border: 1px dashed var(--hairline-strong);
+  border-radius: 50%; color: var(--ink-3); display: grid; place-content: center; gap: 2px; text-align: center;
+}
+.assess-ring span { font-size: 16px; }
+.assess-ring strong { font-size: 13px; font-weight: 500; }
+.assess-dims { display: grid; gap: 8px; }
+.assess-dim { display: grid; grid-template-columns: 64px minmax(0, 1fr) 24px; align-items: center; gap: 8px; }
+.assess-dim > span:first-child { color: var(--ink-2); font-size: 12px; }
+.assess-track { height: 6px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--canvas-inset); }
+.assess-dim .mono-label { margin: 0; text-align: right; }
+
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .theme-control { margin-left: auto; padding: 0 10px; color: var(--ink-3); display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
 .theme-control select { min-height: 30px; border: 1px solid var(--hairline-strong); border-radius: var(--radius); color: var(--ink); background: var(--sheet); }
 .api-state { margin-left: 0; }
 .settings-table .theme-control { margin-left: 0; padding: 0; }
 
+@media (max-width: 1120px) {
+  .jobs-split.with-detail { grid-template-columns: minmax(0, 1fr); }
+  .jobs-split.with-detail .job-detail {
+    position: static; max-height: none; border-left: 0; border-top: 1px solid var(--hairline);
+  }
+}
+
 @media (max-width: 1279px) {
   .page-grid { grid-template-columns: minmax(0, 1fr); }
   .context-rail { display: none; }
+  .screening-split { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); }
+}
+
+@media (max-width: 1023px) {
+  /* 筛选池在窄屏统一单列堆叠（含 <768），避免中间详情卡被挤成 0 宽。 */
+  .screening-split { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 1023px) and (min-width: 768px) {

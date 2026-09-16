@@ -19,7 +19,8 @@ export function createSiteServer({
   apiTokenFile,
 } = {}) {
   return createServer(async (request, response) => {
-    const urlPath = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
+    const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
+    const urlPath = requestUrl.pathname
     if (urlPath.startsWith('/api/')) {
       try {
         const requestChunks = []
@@ -38,7 +39,10 @@ export function createSiteServer({
           }
           proxyHeaders.set('authorization', `Bearer ${token}`)
         }
-        const upstreamPath = isHealth ? '/healthz' : `/api/v1${urlPath.slice(4)}`
+        // Query strings (limit/offset/status filters) must reach the API.
+        const upstreamPath = isHealth
+          ? `/healthz${requestUrl.search}`
+          : `/api/v1${urlPath.slice(4)}${requestUrl.search}`
         const upstream = await fetch(new URL(upstreamPath, apiUpstream), {
           method: request.method,
           headers: proxyHeaders,

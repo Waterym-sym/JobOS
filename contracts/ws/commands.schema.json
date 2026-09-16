@@ -3,11 +3,12 @@
   "$id": "https://ai-resume-os.local/contracts/ws/commands.schema.json",
   "x-status": "v1",
   "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §3",
-  "title": "Server -> Extension Business Commands (6)",
-  "description": "全集仅 6 个业务命令；auth_ping/auth_pong 使用独立 handshake 契约。禁止注册 send_message/deliver/auto_apply/auto_greet/auto_next_page/auto_upload（ADR-009，静态门禁与契约测试双保险）。",
+  "title": "Server -> Extension Business Commands (7)",
+  "description": "全集仅 7 个业务命令；auth_ping/auth_pong 使用独立 handshake 契约。禁止注册 send_message/deliver/auto_apply/auto_greet/auto_next_page/auto_upload（ADR-009，静态门禁与契约测试双保险）。capture_company 仅打开公司主页被动读取，不做任何写操作。",
   "oneOf": [
     { "$ref": "#/$defs/captureList" },
     { "$ref": "#/$defs/captureDetails" },
+    { "$ref": "#/$defs/captureCompany" },
     { "$ref": "#/$defs/abort" },
     { "$ref": "#/$defs/fillOnlineResume" },
     { "$ref": "#/$defs/copyGreeting" },
@@ -62,11 +63,56 @@
             "payload": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["ext_ids", "detail_limit", "delay_ms"],
+              "required": ["detail_limit", "delay_ms"],
+              "anyOf": [
+                { "required": ["ext_ids"] },
+                { "required": ["urls"] }
+              ],
               "properties": {
                 "ext_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                "urls": {
+                  "type": "array",
+                  "minItems": 1,
+                  "description": "导入流（无列表页上下文）提供的目标详情页导航；优先于 ext_ids 拼 URL",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["ext_id", "url"],
+                    "properties": {
+                      "ext_id": { "type": "string", "minLength": 1 },
+                      "url": { "type": "string", "format": "uri" },
+                      "security_id": { "type": "string" }
+                    }
+                  }
+                },
                 "detail_limit": { "type": "integer", "minimum": 1, "maximum": 100 },
                 "delay_ms": { "type": "integer", "minimum": 1800 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "captureCompany": {
+      "allOf": [
+        { "$ref": "#/$defs/baseCommand" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "capture_company" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["company_url", "ext_company_id", "delay_ms"],
+              "properties": {
+                "company_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https://www\\.zhipin\\.com/",
+                  "description": "仅允许 BOSS 公司主页；扩展被动读取页面，不点击、不提交"
+                },
+                "ext_company_id": { "type": "string", "minLength": 1 },
+                "delay_ms": { "type": "integer", "minimum": 1800, "description": "硬下限 1800ms + ±20% 抖动" }
               }
             }
           }

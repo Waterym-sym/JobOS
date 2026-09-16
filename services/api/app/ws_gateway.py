@@ -15,6 +15,7 @@ from services.api.app.capture_repo import (
     mark_progress,
     release_event,
     reserve_event,
+    upsert_company,
     upsert_raw_job,
 )
 from services.api.app.config import Settings, get_settings
@@ -38,6 +39,9 @@ class AuthPingPayload(BaseModel):
     token: str = Field(min_length=16)
     extension_version: str = Field(min_length=1)
     protocol_version: int = Field(ge=1)
+    # Optional capability declaration: commands that require a capability are
+    # routed to an instance that announced it (see registry.COMMAND_CAPABILITIES).
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class AuthPing(BaseModel):
@@ -117,6 +121,16 @@ async def _handle_event_once(envelope: EventEnvelope) -> None:
             ext_id=payload.ext_id,
             tier=payload.tier,
         )
+    elif envelope.type == "company.updated":
+        # Protocol deviation (documented): gongsi-page snapshot, envelope stays
+        # {v:1, kind:"event"}. Not tied to a batch.
+        await upsert_company(payload)
+        audit(
+            "extension.event",
+            "company.updated",
+            str(envelope.id),
+            ext_company_id=payload.ext_company_id,
+        )
     elif envelope.type == "capture.phase":
         if capture_id is not None:
             await mark_progress(capture_id, payload.model_dump())
@@ -135,6 +149,9 @@ async def _handle_event_once(envelope: EventEnvelope) -> None:
             code=payload.code,
             risk=payload.risk,
             recoverable=payload.recoverable,
+            # Field-extraction diagnostics only (page title/DOM hints); chat
+            # text never reaches this path.
+            message=payload.message[:300],
         )
         if capture_id is not None and payload.risk:
             # ADR-009: risk halt, never auto-retry.
@@ -147,7 +164,11 @@ async def _handle_event_once(envelope: EventEnvelope) -> None:
             await complete_batch(
                 capture_id,
                 status="failed",
-                stats={"code": payload.code, "recoverable": payload.recoverable},
+                stats={
+                    "code": payload.code,
+                    "message": payload.message,
+                    "recoverable": payload.recoverable,
+                },
             )
 
 
@@ -273,6 +294,7 @@ async def websocket_gateway(websocket: WebSocket) -> None:
         extension_version=ping.payload.extension_version,
         protocol_version=ping.payload.protocol_version,
         connected_at=datetime.now(UTC),
+        capabilities=frozenset(ping.payload.capabilities),
     )
     await registry.register(instance)
 

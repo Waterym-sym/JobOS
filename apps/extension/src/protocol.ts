@@ -1,6 +1,16 @@
 export const PROTOCOL_VERSION = 1 as const
 export const DEFAULT_WS_URL = 'ws://127.0.0.1:8788/ws' as const
 
+/**
+ * Capabilities this extension announces in auth_ping. The server routes
+ * commands that need them to a capable instance (pool enrich: detail-by-URL
+ * and standalone company pages); the external boss-chorme bridge does not
+ * announce them, so legacy commands keep going to it.
+ */
+export const CAPABILITIES = ['capture_details_urls', 'capture_company'] as const
+
+export type Capability = (typeof CAPABILITIES)[number]
+
 export type AuthPing = {
   v: 1
   kind: 'handshake'
@@ -10,6 +20,7 @@ export type AuthPing = {
     token: string
     extension_version: string
     protocol_version: 1
+    capabilities: string[]
   }
 }
 
@@ -40,6 +51,7 @@ export function buildAuthPing(token: string, extensionVersion: string): AuthPing
       token,
       extension_version: extensionVersion,
       protocol_version: PROTOCOL_VERSION,
+      capabilities: [...CAPABILITIES],
     },
   }
 }

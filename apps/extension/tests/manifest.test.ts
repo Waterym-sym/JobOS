@@ -17,14 +17,16 @@ const manifest = JSON.parse(
 ) as Manifest
 
 describe('extension manifest safety baseline', () => {
-  it('uses MV3 with no site access in the scaffold', () => {
+  it('limits site access to BOSS pages only', () => {
     expect(manifest.manifest_version).toBe(3)
-    expect(manifest.host_permissions ?? []).toEqual([])
+    // Site access is exactly the BOSS host: no <all_urls>, no wildcards.
+    expect(manifest.host_permissions).toEqual(['https://www.zhipin.com/*'])
+    // Data collection happens through injected reads, not declared content scripts.
     expect(manifest.content_scripts ?? []).toEqual([])
   })
 
-  it('requests only local storage', () => {
-    expect(manifest.permissions).toEqual(['storage'])
+  it('requests storage plus the tab/scripting/alarm permissions capture needs', () => {
+    expect(manifest.permissions).toEqual(['storage', 'scripting', 'tabs', 'alarms'])
   })
 
   it('exposes a local-only pairing page without remote script access', () => {

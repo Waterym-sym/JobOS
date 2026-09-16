@@ -39,6 +39,7 @@ class RawJobPayload(BaseModel):
     title: str | None = None
     company: str | None = None
     city: str | None = None
+    district: str | None = None
     salary_text: str | None = None
     low_salary: float | None = None
     high_salary: float | None = None
@@ -75,7 +76,7 @@ class RawJobPayload(BaseModel):
 class CapturePhasePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    phase: Literal["list", "detail"]
+    phase: Literal["list", "detail", "company"]
     done: int = Field(ge=0)
     total: int = Field(ge=0)
     current: str = Field(min_length=1)
@@ -106,6 +107,17 @@ class CaptureErrorPayload(BaseModel):
     risk: bool
 
 
+class CompanyPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["boss"] = "boss"
+    ext_company_id: str = Field(min_length=1)
+    name: str | None = None
+    sections: dict = Field(default_factory=dict)
+    raw_json: dict | None = None
+    captured_at: datetime | None = None
+
+
 class EventEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -125,6 +137,7 @@ EVENT_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "job.updated": RawJobPayload,
     "capture.completed": CaptureCompletedPayload,
     "capture.error": CaptureErrorPayload,
+    "company.updated": CompanyPayload,
 }
 
 # ---------------------------------------------------------------- receipts

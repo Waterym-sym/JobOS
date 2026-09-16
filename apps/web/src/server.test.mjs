@@ -74,6 +74,29 @@ describe('site server', () => {
     })
   })
 
+  it('forwards the query string so list filters reach the API', async () => {
+    const api = createServer((request, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ url: request.url }))
+    })
+    const apiPort = await listen(api)
+    const sitePort = await listen(
+      createSiteServer({
+        root: '/missing',
+        apiUpstream: `http://127.0.0.1:${apiPort}`,
+        apiToken: 'server-only-token',
+      }),
+    )
+
+    const response = await fetch(
+      `http://127.0.0.1:${sitePort}/api/screening-entries?status=candidate&limit=20`,
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      url: '/api/v1/screening-entries?status=candidate&limit=20',
+    })
+  })
+
   it('does not accept a browser-supplied token when server credentials are absent', async () => {
     const sitePort = await listen(createSiteServer({ root: '/missing' }))
     const response = await fetch(`http://127.0.0.1:${sitePort}/api/captures`, {

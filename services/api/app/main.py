@@ -6,13 +6,13 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.api.app import capture_repo
+from services.api.app import capture_repo, enrich, job_import
 from services.api.app.config import Settings, get_settings
 from services.api.app.errors import ErrorEnvelope
 from services.api.app.pairing import PairingTokenStore
@@ -44,6 +44,12 @@ class AbortRequest(BaseModel):
     reason: str = Field(default="manual abort", min_length=1, max_length=200)
 
 
+class ShortlistCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ext_id: str = Field(min_length=1)
+    note: str | None = Field(default=None, max_length=500)
+
+
 class ApiProblem(Exception):
     def __init__(
         self,
@@ -62,6 +68,29 @@ class ApiProblem(Exception):
 
 
 bearer = HTTPBearer(auto_error=False)
+
+
+def derive_enrich_state(
+    *,
+    failed_reason: str | None,
+    detail_at: Any,
+    jd_text: str | None,
+    ext_company_id: str | None,
+    company_ids: set[str],
+) -> str:
+    """Per-job enrich state, derived from stored data only.
+
+    The queue-wide pause is deliberately not projected here: a paused queue is
+    reported by /enrich/queue, never on an individual job (otherwise completed
+    jobs would look unfinished).
+    """
+    if failed_reason is not None:
+        return "failed"
+    if detail_at is None or not jd_text:
+        return "pending"
+    if ext_company_id is None or ext_company_id in company_ids:
+        return "done"
+    return "detail_done"
 
 
 def _token_store(settings: Settings) -> PairingTokenStore:
@@ -84,6 +113,11 @@ def _is_local_origin(origin: str | None) -> bool:
         return True
     try:
         parsed = urlparse(origin)
+        # Browser extension service workers send "chrome-extension://<id>" on
+        # non-GET requests; they are trusted local clients (loopback peer is
+        # enforced separately, and the pairing token is still required).
+        if parsed.scheme in {"chrome-extension", "moz-extension", "safari-extension"}:
+            return True
         return parsed.scheme in {"http", "https"} and bool(
             parsed.hostname and ip_address(parsed.hostname).is_loopback
         )
@@ -112,7 +146,11 @@ async def require_local_auth(
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     _token_store(get_settings()).load_or_create()
-    yield
+    await enrich.start()
+    try:
+        yield
+    finally:
+        await enrich.stop()
 
 
 def build_app(service_name: str) -> FastAPI:
@@ -235,6 +273,152 @@ def register_capture_routes(app: FastAPI) -> None:
             limit=safe_limit, offset=safe_offset, batch_id=batch_id
         )
         return {"items": items, "limit": safe_limit, "offset": safe_offset}
+
+    @router.get("/raw-jobs/{ext_id}", tags=["capture"])
+    async def read_job_profile(ext_id: str) -> dict[str, Any]:
+        profile = await capture_repo.get_job_profile(ext_id)
+        if profile is None:
+            raise ApiProblem(
+                404, "JOB_NOT_FOUND", "unknown ext_id; import the job list first"
+            )
+        # 导航数据（list_json）只用于内部推导公司主键，不对外输出。
+        ext_company_id = enrich.company_ext_id(profile.pop("list_json", None))
+        company = (
+            await capture_repo.get_company_by_ext_id(ext_company_id)
+            if ext_company_id
+            else None
+        )
+        return {"job": profile, "company": company}
+
+    @router.get("/companies", tags=["capture"])
+    async def read_companies(limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        safe_limit = min(max(limit, 1), 200)
+        safe_offset = max(offset, 0)
+        items = await capture_repo.list_companies(limit=safe_limit, offset=safe_offset)
+        return {"items": items, "limit": safe_limit, "offset": safe_offset}
+
+    @router.post("/jobs/import", tags=["capture"])
+    async def import_jobs(file: Annotated[UploadFile, File()]) -> dict[str, Any]:
+        data = await file.read()
+        if len(data) > job_import.MAX_FILE_BYTES:
+            raise ApiProblem(
+                413,
+                "PAYLOAD_INVALID",
+                f"file exceeds {job_import.MAX_FILE_BYTES} bytes",
+            )
+        try:
+            return await job_import.run_import(data)
+        except job_import.ExportFormatError as exc:
+            raise ApiProblem(422, "PAYLOAD_INVALID", str(exc)) from exc
+
+    def _shortlist_item(row: dict[str, Any], company_ids: set[str]) -> dict[str, Any]:
+        raw_job_id = row["raw_job_id"]
+        failure_reason = enrich.failure(raw_job_id)
+        state = derive_enrich_state(
+            failed_reason=failure_reason,
+            detail_at=row["detail_at"],
+            jd_text=row["jd_text"],
+            ext_company_id=enrich.company_ext_id(row["list_json"]),
+            company_ids=company_ids,
+        )
+        return {
+            "id": str(row["id"]),
+            "raw_job_id": str(raw_job_id),
+            "ext_id": row["ext_id"],
+            "title": row["title"],
+            "company": row["company"],
+            "city": row["city"],
+            "salary_text": row["salary_text"],
+            "status": row["status"],
+            "note": row["note"],
+            "enrich_state": state,
+            "failure_reason": failure_reason,
+            "detail_at": row["detail_at"].isoformat() if row["detail_at"] else None,
+            "added_at": row["added_at"].isoformat() if row["added_at"] else None,
+        }
+
+    @router.post("/shortlist", status_code=201, tags=["shortlist"])
+    async def add_shortlist(body: ShortlistCreate) -> dict[str, Any]:
+        try:
+            created = await capture_repo.add_to_shortlist(body.ext_id, body.note)
+        except capture_repo.ShortlistExists as exc:
+            raise ApiProblem(409, "SHORTLIST_CONFLICT", "job is already in the pool") from exc
+        if created is None:
+            raise ApiProblem(
+                404, "JOB_NOT_FOUND", "unknown ext_id; import the job list first"
+            )
+        enrich.enqueue(created["raw_job_id"])
+        row = await capture_repo.get_shortlist_row(created["id"])
+        assert row is not None
+        return _shortlist_item(row, await capture_repo.list_company_ext_ids())
+
+    @router.get("/shortlist", tags=["shortlist"])
+    async def read_shortlist() -> list[dict[str, Any]]:
+        rows = await capture_repo.list_shortlist()
+        company_ids = await capture_repo.list_company_ext_ids()
+        return [_shortlist_item(row, company_ids) for row in rows]
+
+    @router.post("/shortlist/{shortlist_id}/remove", tags=["shortlist"])
+    async def remove_shortlist(shortlist_id: UUID) -> dict[str, Any]:
+        existing = await capture_repo.get_shortlist_row(shortlist_id)
+        if existing is None:
+            raise ApiProblem(404, "CAPTURE_NOT_FOUND", "pool entry was not found")
+        await capture_repo.remove_shortlist(shortlist_id)
+        enrich.discard(existing["raw_job_id"])
+        row = await capture_repo.get_shortlist_row(shortlist_id)
+        assert row is not None
+        return _shortlist_item(row, await capture_repo.list_company_ext_ids())
+
+    @router.get("/enrich/queue", tags=["enrich"])
+    async def read_enrich_queue() -> dict[str, Any]:
+        return await enrich.status()
+
+    @router.post("/enrich/resume", tags=["enrich"])
+    async def resume_enrich() -> dict[str, Any]:
+        return await enrich.resume()
+
+    @router.get("/screening-entries", tags=["screening"])
+    async def read_screening_entries(
+        status: Literal["screened", "candidate"] = "screened",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        safe_limit = min(max(limit, 1), 200)
+        safe_offset = max(offset, 0)
+        items = await capture_repo.list_screening_entries(
+            status=status, limit=safe_limit, offset=safe_offset
+        )
+        return {"items": items, "limit": safe_limit, "offset": safe_offset}
+
+    async def _transition_screening_entry(entry_id: UUID, to_status: str) -> dict[str, Any]:
+        try:
+            entry = await capture_repo.update_screening_entry_status(
+                entry_id, to_status=to_status
+            )
+        except capture_repo.ScreeningTransitionInvalid as exc:
+            raise ApiProblem(
+                409, "SCREENING_TRANSITION_INVALID", "transition is not allowed"
+            ) from exc
+        if entry is None:
+            raise ApiProblem(
+                404, "SCREENING_ENTRY_NOT_FOUND", "screening entry was not found"
+            )
+        return entry
+
+    @router.post("/screening-entries/{entry_id}/promote", tags=["screening"])
+    async def promote_screening_entry(entry_id: UUID) -> dict[str, Any]:
+        """人工确认进入候选区；系统不会自动推进（ARCH-GOV-002）。"""
+        return await _transition_screening_entry(entry_id, "candidate")
+
+    @router.post("/screening-entries/{entry_id}/dismiss", tags=["screening"])
+    async def dismiss_screening_entry(entry_id: UUID) -> dict[str, Any]:
+        """忽略该岗位（终态，数据保留可审计）。"""
+        return await _transition_screening_entry(entry_id, "dismissed")
+
+    @router.post("/screening-entries/{entry_id}/revert", tags=["screening"])
+    async def revert_screening_entry(entry_id: UUID) -> dict[str, Any]:
+        """候选区退回筛选池。"""
+        return await _transition_screening_entry(entry_id, "screened")
 
     app.include_router(router)
 

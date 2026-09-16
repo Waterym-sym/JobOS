@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildAuthPing, DEFAULT_WS_URL, uuid7 } from '../src/protocol'
+import { buildAuthPing, CAPABILITIES, DEFAULT_WS_URL, uuid7 } from '../src/protocol'
 
 describe('pairing protocol', () => {
   it('builds the client-first auth handshake', () => {
@@ -14,8 +14,13 @@ describe('pairing protocol', () => {
         token: '0123456789abcdef',
         extension_version: '0.1.0',
         protocol_version: 1,
+        capabilities: ['capture_details_urls', 'capture_company'],
       },
     })
+  })
+
+  it('announces exactly the pool-enrich capabilities the server may route', () => {
+    expect([...CAPABILITIES]).toEqual(['capture_details_urls', 'capture_company'])
   })
 
   it('creates UUIDv7 message identifiers', () => {

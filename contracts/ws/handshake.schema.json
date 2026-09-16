@@ -37,7 +37,12 @@
               "properties": {
                 "token": { "type": "string", "minLength": 16 },
                 "extension_version": { "type": "string", "minLength": 1 },
-                "protocol_version": { "type": "integer", "minimum": 1 }
+                "protocol_version": { "type": "integer", "minimum": 1 },
+                "capabilities": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "能力声明（可选）。服务端据此把需要特定能力的命令路由到具备该能力的实例；未声明的实例仍可执行通用命令。"
+                }
               }
             }
           }

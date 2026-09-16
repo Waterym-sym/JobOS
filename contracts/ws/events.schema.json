@@ -3,12 +3,13 @@
   "$id": "https://ai-resume-os.local/contracts/ws/events.schema.json",
   "x-status": "v1",
   "x-doc": "docs/architecture/21-浏览器扩展集成协议.md §4",
-  "title": "Extension -> Server Events (7)",
-  "description": "扩展上报全集 7 个事件。所有上报按 source+ext_id / ext_msg_id 幂等。业务侧领域事件（screen.completed 等 8 类）为服务端内部事件，不经 WebSocket，不在本契约。",
+  "title": "Extension -> Server Events (8)",
+  "description": "扩展上报全集 8 个事件。所有上报按 source+ext_id / ext_msg_id 幂等。业务侧领域事件（screen.completed 等 8 类）为服务端内部事件，不经 WebSocket，不在本契约。company.updated 由 capture_company 命令触发的公司主页被动读取产生。",
   "oneOf": [
     { "$ref": "#/$defs/capturePhase" },
     { "$ref": "#/$defs/jobCaptured" },
     { "$ref": "#/$defs/jobUpdated" },
+    { "$ref": "#/$defs/companyUpdated" },
     { "$ref": "#/$defs/captureCompleted" },
     { "$ref": "#/$defs/captureError" },
     { "$ref": "#/$defs/chatEvent" },
@@ -42,7 +43,7 @@
               "additionalProperties": false,
               "required": ["phase", "done", "total", "current"],
               "properties": {
-                "phase": { "type": "string", "enum": ["list", "detail"] },
+                "phase": { "type": "string", "enum": ["list", "detail", "company"] },
                 "done": { "type": "integer", "minimum": 0 },
                 "total": { "type": "integer", "minimum": 0 },
                 "current": { "type": "string" }
@@ -72,6 +73,33 @@
           "properties": {
             "type": { "const": "job.updated" },
             "payload": { "$ref": "./raw-job.schema.json" }
+          }
+        }
+      ]
+    },
+    "companyUpdated": {
+      "allOf": [
+        { "$ref": "#/$defs/baseEvent" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "company.updated" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["source", "ext_company_id", "sections", "captured_at"],
+              "properties": {
+                "source": { "const": "boss" },
+                "ext_company_id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string" },
+                "sections": {
+                  "type": "object",
+                  "description": "公司主页分区被动提取结果，键为分区名（intro/address/industry 等），值为文本或结构化数据"
+                },
+                "raw_json": { "type": "object" },
+                "captured_at": { "type": "string", "format": "date-time" }
+              }
+            }
           }
         }
       ]

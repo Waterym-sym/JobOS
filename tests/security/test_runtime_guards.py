@@ -42,6 +42,7 @@ def test_command_registry_contains_only_frozen_safe_command_set() -> None:
     assert {
         "capture_list",
         "capture_details",
+        "capture_company",
         "abort",
         "fill_online_resume",
         "copy_greeting",

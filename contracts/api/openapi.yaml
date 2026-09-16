@@ -18,6 +18,7 @@ tags:
   - name: capture
   - name: screening
   - name: shortlist
+  - name: enrich
   - name: package
   - name: events
   - name: retrospective
@@ -72,7 +73,10 @@ components:
             - BUDGET_EXCEEDED
             - PAYLOAD_INVALID
             - CAPTURE_NOT_FOUND
+            - JOB_NOT_FOUND
             - EXTENSION_OFFLINE
+            - SCREENING_ENTRY_NOT_FOUND
+            - SCREENING_TRANSITION_INVALID
         message: { type: string }
         trace_id: { type: string }
         details: { type: object }
@@ -134,6 +138,42 @@ components:
         list_at: { type: [string, 'null'], format: date-time }
         detail_at: { type: [string, 'null'], format: date-time }
         batch_id: { type: [string, 'null'], format: uuid }
+    JobProfile:
+      type: object
+      required: [job, company]
+      description: 岗位详情面板投影（只读本机库；不含聊天/证据原文与导航用 list_json）
+      properties:
+        job:
+          type: object
+          required: [id, ext_id]
+          properties:
+            id: { type: string, format: uuid }
+            ext_id: { type: string }
+            title: { type: [string, 'null'] }
+            company: { type: [string, 'null'] }
+            city: { type: [string, 'null'] }
+            district: { type: [string, 'null'] }
+            salary_text: { type: [string, 'null'] }
+            exp_text: { type: [string, 'null'] }
+            degree: { type: [string, 'null'] }
+            industry: { type: [string, 'null'] }
+            stage: { type: [string, 'null'] }
+            scale: { type: [string, 'null'] }
+            address: { type: [string, 'null'] }
+            boss_name: { type: [string, 'null'] }
+            active_time: { type: [string, 'null'] }
+            skill_tags: { type: array, items: { type: string } }
+            jd_text: { type: [string, 'null'], description: 详情页岗位描述全文（本机原文） }
+            detail_at: { type: [string, 'null'], format: date-time }
+        company:
+          type: [object, 'null']
+          description: null = 公司页尚未补全或该岗位无公司关联
+          required: [ext_company_id]
+          properties:
+            ext_company_id: { type: string }
+            name: { type: [string, 'null'] }
+            sections: { type: object, description: intro/talent/benefits/products/business/address/executives/bosses 片段 }
+            updated_at: { type: [string, 'null'], format: date-time }
     ScreenResult:
       type: object
       properties:
@@ -160,6 +200,82 @@ components:
         job_id: { type: string, format: uuid }
         status: { type: string, enum: [confirmed, removed] }
         note: { type: string }
+    ShortlistCreate:
+      type: object
+      additionalProperties: false
+      required: [ext_id]
+      properties:
+        ext_id: { type: string, minLength: 1, description: 岗位外部 ID（导入 JSON 的 jobId） }
+        note: { type: string }
+    ShortlistItem:
+      type: object
+      required: [id, ext_id, title, company, status, enrich_state]
+      properties:
+        id: { type: string, format: uuid }
+        raw_job_id: { type: string, format: uuid }
+        ext_id: { type: string }
+        title: { type: [string, 'null'] }
+        company: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        salary_text: { type: [string, 'null'] }
+        status: { type: string, enum: [confirmed, removed] }
+        note: { type: string }
+        enrich_state: { type: string, enum: [pending, detail_done, done, failed], description: 补全状态（detail_at 与公司数据推导）。队列暂停不投影到岗位状态，暂停只在 /enrich/queue 表达 }
+        failure_reason: { type: [string, 'null'], description: 单次尝试失败的原因（仅 enrich_state=failed 时非空） }
+        detail_at: { type: [string, 'null'], format: date-time }
+        added_at: { type: string, format: date-time }
+    JobImportResult:
+      type: object
+      required: [batch_id, total, created, merged, invalid]
+      properties:
+        batch_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        created: { type: integer, minimum: 0 }
+        merged: { type: integer, minimum: 0 }
+        invalid:
+          type: array
+          items:
+            type: object
+            required: [index, reason]
+            properties:
+              index: { type: integer, minimum: 0 }
+              reason: { type: string }
+    ScreeningEntryItem:
+      type: object
+      required: [id, raw_job_id, ext_id, status, entered_at]
+      description: 筛选池/候选区流转记录（补全完成自动流入；进入候选区必须人工确认）
+      properties:
+        id: { type: string, format: uuid }
+        raw_job_id: { type: string, format: uuid }
+        ext_id: { type: string }
+        title: { type: [string, 'null'] }
+        company: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        salary_text: { type: [string, 'null'] }
+        status: { type: string, enum: [screened, candidate, dismissed] }
+        entered_at: { type: string, format: date-time }
+    EnrichQueueStatus:
+      type: object
+      required: [paused, paused_reason, running, pending]
+      properties:
+        paused: { type: boolean }
+        paused_reason: { type: [string, 'null'], description: risk_halted 等 }
+        blocked_reason: { type: [string, 'null'], description: 有工作但无法推进的原因（未配对/客户端缺少 url 补全能力），无工作时为 null }
+        running:
+          type: [object, 'null']
+          properties:
+            raw_job_id: { type: string, format: uuid }
+            ext_id: { type: string }
+            stage: { type: string, enum: [detail, company] }
+        pending:
+          type: array
+          items:
+            type: object
+            required: [raw_job_id, ext_id, title]
+            properties:
+              raw_job_id: { type: string, format: uuid }
+              ext_id: { type: string }
+              title: { type: [string, 'null'] }
     ApplicationPackage:
       type: object
       properties:
@@ -282,6 +398,26 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/RawJobSummary' } }
                   limit: { type: integer }
                   offset: { type: integer }
+  /raw-jobs/{ext_id}:
+    get:
+      tags: [capture]
+      summary: 岗位详情面板（JD 全文 + 公司画像；只读本机数据）
+      parameters:
+        - name: ext_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobProfile' }
+        '404':
+          description: JOB_NOT_FOUND（未导入该岗位）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /filter-sets:
     post:
       tags: [screening]
@@ -316,6 +452,157 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /jobs/import:
+    post:
+      tags: [capture]
+      summary: 导入扩展侧导出的岗位列表 JSON（替代列表抓取；幂等 upsert，list_json 保留旧值）
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .json 文件，≤5MB，jobs 数组 ≤500 条
+      responses:
+        '200':
+          description: 导入完成（含逐条无效报告）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobImportResult' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /shortlist:
+    post:
+      tags: [shortlist]
+      summary: 岗位入池（写入 shortlist confirmed；入池即自动入队按需补全：详情页→公司页）
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShortlistCreate' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShortlistItem' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [shortlist]
+      summary: 岗位池列表（附补全状态 enrich_state）
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShortlistItem' }
+  /shortlist/{id}/remove:
+    post:
+      tags: [shortlist]
+      summary: 移出岗位池（status→removed；取消未开始的补全排队）
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShortlistItem' }
+        '404': { $ref: '#/components/responses/Error' }
+  /enrich/queue:
+    get:
+      tags: [enrich]
+      summary: 补全队列状态（运行中条目 / 暂停原因 / 待处理）
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichQueueStatus' }
+  /enrich/resume:
+    post:
+      tags: [enrich]
+      summary: 人工恢复补全队列（risk_halted 后必须人工恢复，不得自动重试）
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichQueueStatus' }
+        '409': { $ref: '#/components/responses/Error' }
+  /screening-entries:
+    get:
+      tags: [screening]
+      summary: 筛选池/候选区列表（补全完成自动流入筛选池；进入候选区必须人工确认）
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [screened, candidate], default: screened }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, limit, offset]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ScreeningEntryItem' } }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '422': { $ref: '#/components/responses/Error' }
+  /screening-entries/{id}/promote:
+    post:
+      tags: [screening]
+      summary: 人工确认进入候选区（screened → candidate；系统不会自动推进）
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: promoted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreeningEntryItem' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /screening-entries/{id}/dismiss:
+    post:
+      tags: [screening]
+      summary: 忽略该岗位（screened → dismissed，终态；数据保留可审计）
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: dismissed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreeningEntryItem' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /screening-entries/{id}/revert:
+    post:
+      tags: [screening]
+      summary: 候选区退回筛选池（candidate → screened）
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: reverted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreeningEntryItem' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /applications/{id}/package:
     post:
       tags: [package]

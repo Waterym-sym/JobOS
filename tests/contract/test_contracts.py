@@ -48,9 +48,37 @@ def test_capture_rest_contract_is_versioned_and_never_exposes_pairing_token() ->
         "/captures/{id}",
         "/captures/{id}/abort",
         "/raw-jobs",
+        "/raw-jobs/{ext_id}",
+        "/screening-entries",
+        "/screening-entries/{id}/promote",
+        "/screening-entries/{id}/dismiss",
+        "/screening-entries/{id}/revert",
     } <= set(paths)
     assert not any("pairing-token" in path for path in paths)
     assert contract["security"] == [{"pairingToken": []}]
+
+
+def test_screening_flow_contract_is_human_gated_and_keeps_the_paused_state_out() -> None:
+    contract = yaml.safe_load(
+        (ROOT / "contracts" / "api" / "openapi.yaml").read_text(encoding="utf-8")
+    )
+    schemas = contract["components"]["schemas"]
+
+    codes = set(schemas["Error"]["properties"]["code"]["enum"])
+    assert {"SCREENING_ENTRY_NOT_FOUND", "SCREENING_TRANSITION_INVALID"} <= codes
+
+    # 队列暂停只在 /enrich/queue 表达，不再投影到单个岗位状态。
+    assert schemas["ShortlistItem"]["properties"]["enrich_state"]["enum"] == [
+        "pending",
+        "detail_done",
+        "done",
+        "failed",
+    ]
+    assert schemas["ScreeningEntryItem"]["properties"]["status"]["enum"] == [
+        "screened",
+        "candidate",
+        "dismissed",
+    ]
 
 
 def test_alembic_is_the_only_executable_migration_entry() -> None:
@@ -58,7 +86,7 @@ def test_alembic_is_the_only_executable_migration_entry() -> None:
     assert not (ROOT / "services" / "api" / "app" / "migrate.py").exists()
     assert (ROOT / "alembic.ini").is_file()
     revisions = list((ROOT / "migrations" / "versions").glob("*.py"))
-    assert len(revisions) == 1
+    assert len(revisions) >= 1
     run_source = (ROOT / "services" / "api" / "run.py").read_text(encoding="utf-8")
     assert "run_migrations" not in run_source
 

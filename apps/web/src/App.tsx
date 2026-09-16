@@ -1,15 +1,14 @@
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
-  abortCapture,
-  createCapture,
   fetchExtensionStatus,
-  fetchRawJobs,
-  type BatchInfo,
-  type RawJobItem,
+  importJobs,
+  type JobImportResult,
 } from './lib/capture'
 import { fetchHealth } from './lib/health'
+import { CaptureJobsSheet, JobsPage } from './pages_jobs'
+import { CandidatesPage, ScreeningPage } from './pages_screening'
 import { flowRoutes, resolveRoute, utilityRoutes, type AppRoute } from './routes'
 import { applyTheme, resolveTheme, themes, type Theme } from './theme'
 
@@ -47,206 +46,80 @@ function EmptyState({ route }: { route: AppRoute }) {
   )
 }
 
-function RawJobsCard({ items, isPending }: { items: RawJobItem[]; isPending: boolean }) {
-  return (
-    <div className="field full">
-      <label>最近入池岗位（raw_job）</label>
-      {isPending ? (
-        <p className="form-message">读取中…</p>
-      ) : items.length === 0 ? (
-        <p className="form-message">尚无岗位落库。触发采集或在扩展侧一键抓取后，数据会出现在这里。</p>
-      ) : (
-        <table className="raw-table">
-          <thead>
-            <tr><th>标题</th><th>公司</th><th>城市</th><th>薪资</th><th className="mono">ext_id</th></tr>
-          </thead>
-          <tbody>
-            {items.map((job) => (
-              <tr key={job.id}>
-                <td>{job.title ?? '—'}</td>
-                <td>{job.company ?? '—'}</td>
-                <td>{job.city ?? '—'}</td>
-                <td>{job.salary_text ?? '—'}</td>
-                <td className="mono">{job.ext_id}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
-
+/** 采集中心：扩展配对状态（标题栏右侧）+ 列表 JSON 导入按钮（状态丸左侧）；岗位列表在下一张卡。 */
 function CapturePage() {
+  const queryClient = useQueryClient()
   const extension = useQuery({
     queryKey: ['extension-status'],
     queryFn: ({ signal }) => fetchExtensionStatus(signal),
     refetchInterval: 4000,
   })
-  const rawJobs = useQuery({
-    queryKey: ['raw-jobs'],
-    queryFn: ({ signal }) => fetchRawJobs(signal),
-    refetchInterval: 6000,
-  })
-  const [kind, setKind] = useState<'list' | 'detail'>('list')
-  const [maxItems, setMaxItems] = useState('30')
-  const [delayMs, setDelayMs] = useState('1800')
-  const [extIdsText, setExtIdsText] = useState('')
-  const [detailLimit, setDetailLimit] = useState('15')
-  const [activeBatch, setActiveBatch] = useState<BatchInfo | null>(null)
-  const [formMessage, setFormMessage] = useState<{ text: string; error: boolean } | null>(null)
-
-  const captureMutation = useMutation({
-    mutationFn: createCapture,
-    onSuccess: (batch) => {
-      setActiveBatch(batch)
-      setFormMessage({ text: `批次已建立：${batch.id.slice(0, 8)} · ${batch.status}`, error: false })
-      void extension.refetch()
-      void rawJobs.refetch()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
+  const importMutation = useMutation({
+    mutationFn: importJobs,
+    onSuccess: (result: JobImportResult) => {
+      const firstInvalid = result.invalid[0]
+      const invalidNote = firstInvalid
+        ? `，无效 ${result.invalid.length} 条（如第 ${firstInvalid.index + 1} 项：${firstInvalid.reason}）`
+        : ''
+      setMessage({
+        text: `导入完成：新增 ${result.created} · 合并 ${result.merged}${invalidNote}`,
+        error: false,
+      })
+      void queryClient.invalidateQueries({ queryKey: ['raw-jobs'] })
     },
-    onError: (err: Error) => setFormMessage({ text: err.message, error: true }),
-  })
-  const abortMutation = useMutation({
-    mutationFn: abortCapture,
-    onSuccess: (batch) => {
-      setActiveBatch(batch)
-      setFormMessage({ text: `批次已中止：${batch.id.slice(0, 8)}`, error: false })
-    },
-    onError: (err: Error) => setFormMessage({ text: err.message, error: true }),
+    onError: (error: Error) => setMessage({ text: error.message, error: true }),
   })
 
-  const paired = extension.data?.paired === true
-  const instance = extension.data?.paired ? extension.data : null
-  const batchRunning = activeBatch ? ['queued', 'running'].includes(activeBatch.status) : false
-
-  async function submitCapture() {
-    const delay = Number(delayMs)
-    if (Number.isNaN(delay) || delay < 1800) {
-      setFormMessage({ text: '节流间隔不得低于 1800ms', error: true })
+  function submit(file: File | undefined) {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      setMessage({ text: '请选择扩展导出的 .json 岗位列表文件', error: true })
       return
     }
-    if (kind === 'list') {
-      const items = Number(maxItems)
-      if (Number.isNaN(items) || items < 1) {
-        setFormMessage({ text: 'max_items 需为正整数（1-500）', error: true })
-        return
-      }
-      captureMutation.mutate({
-        kind: 'list',
-        max_items: Math.min(Math.max(items, 1), 500),
-        detail_limit: 15,
-        delay_ms: delay,
-      })
-    } else {
-      const ids = extIdsText.split(/[\s,，]+/).filter(Boolean)
-      if (ids.length === 0) {
-        setFormMessage({ text: '详情采集必须提供 ext_ids', error: true })
-        return
-      }
-      const limit = Number(detailLimit) || ids.length
-      captureMutation.mutate({
-        kind: 'detail',
-        ext_ids: ids,
-        max_items: Math.min(ids.length, 500),
-        detail_limit: Math.min(Math.max(limit, 1), 100),
-        delay_ms: delay,
-      })
-    }
+    importMutation.mutate(file)
   }
 
+  const paired = extension.data?.paired === true
+
   return (
-    <section className="sheet" aria-labelledby="connection-heading">
-      <div className="sheet-heading">
-        <div><p className="mono-label">LOCAL BRIDGE</p><h2 id="connection-heading">扩展接入与采集</h2></div>
-        <span className={`status-pill ${paired ? 'confirmed' : ''}`}>
-          <span aria-hidden="true">{paired ? '●' : '○'}</span>
-          {extension.isPending ? '检查中' : paired ? '扩展已配对' : '扩展未接入'}
-        </span>
-      </div>
-
-      <div className="capture-body">
-        <dl className="status-table" style={{ borderBottom: '1px solid var(--hairline)' }}>
-          <div>
-            <dt>扩展实例</dt>
-            <dd>
-              {instance ? (
-                <>v{instance.extension_version} · {instance.instance_id.slice(0, 8)}<br />
-                  <span className="tag-micro">connected {instance.connected_at.slice(11, 19)}</span>
-                </>
-              ) : (
-                '未配对：在扩展「选项」页填入网关地址与配对码'
-              )}
-            </dd>
+    <div className="sheet-stack">
+      <section className="sheet" aria-labelledby="connection-heading">
+        <div className="sheet-heading">
+          <div><p className="mono-label">LOCAL BRIDGE</p><h2 id="connection-heading">扩展接入与采集</h2></div>
+          <div className="heading-actions">
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(event) => submit(event.target.files?.[0])}
+            />
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => inputRef.current?.click()}
+              disabled={importMutation.isPending}
+              title="导入扩展导出的岗位列表 JSON（≤5MB，≤500 条）；重复导入按 (source, ext_id) 幂等合并"
+            >
+              {importMutation.isPending ? '导入中…' : '选择文件导入'}
+            </button>
+            <span className={`status-pill ${paired ? 'confirmed' : ''}`}>
+              <span aria-hidden="true">{paired ? '●' : '○'}</span>
+              {extension.isPending ? '检查中' : paired ? '扩展已配对' : '扩展未接入'}
+            </span>
           </div>
-          <div>
-            <dt>Gateway</dt>
-            <dd><code>ws://127.0.0.1:8788/ws</code></dd>
-          </div>
-          <div>
-            <dt>安全基线</dt>
-            <dd>间隔 ≥1800ms + 抖动 · 并发恒 1 · 不自动翻页/发送</dd>
-          </div>
-        </dl>
-
-        <div className="notice">
-          <strong>配对码不会发送到浏览器。</strong>
-          <span>请从本机 <code>data/config/pairing.token</code> 复制到扩展选项页；完成配对后即可在这里查看连接状态。</span>
         </div>
-
-        <div className="capture-grid">
-          <div className="field">
-            <label>采集类型</label>
-            <div className="kind-toggle">
-              <button type="button" className={kind === 'list' ? 'active' : ''} onClick={() => setKind('list')}>列表</button>
-              <button type="button" className={kind === 'detail' ? 'active' : ''} onClick={() => setKind('detail')}>详情</button>
-            </div>
+        {message ? (
+          <div className="sheet-body">
+            <p className={`form-message ${message.error ? 'error' : ''}`}>{message.text}</p>
           </div>
-          <div className="field">
-            <label>节流间隔 delay_ms（≥1800）</label>
-            <input value={delayMs} onChange={(e) => setDelayMs(e.target.value)} inputMode="numeric" />
-          </div>
-          {kind === 'list' ? (
-            <div className="field">
-              <label>max_items（1-500）</label>
-              <input value={maxItems} onChange={(e) => setMaxItems(e.target.value)} inputMode="numeric" />
-            </div>
-          ) : (
-            <>
-              <div className="field full">
-                <label>ext_ids（逗号/换行/空格分隔）</label>
-                <input value={extIdsText} onChange={(e) => setExtIdsText(e.target.value)} placeholder="ext_id_1, ext_id_2 …" />
-              </div>
-              <div className="field">
-                <label>detail_limit（1-100）</label>
-                <input value={detailLimit} onChange={(e) => setDetailLimit(e.target.value)} inputMode="numeric" />
-              </div>
-            </>
-          )}
-          <RawJobsCard items={rawJobs.data ?? []} isPending={rawJobs.isPending} />
-        </div>
+        ) : null}
+      </section>
 
-        <div className="capture-actions">
-          <button
-            type="button"
-            className="primary-action"
-            onClick={submitCapture}
-            disabled={captureMutation.isPending || !paired}
-          >
-            {captureMutation.isPending ? '下发中…' : '下发采集命令'}
-          </button>
-          <button
-            type="button"
-            className="ghost danger"
-            onClick={() => activeBatch && abortMutation.mutate(activeBatch.id)}
-            disabled={!batchRunning || abortMutation.isPending}
-          >
-            中止当前批次
-          </button>
-          {formMessage ? <p className={`form-message ${formMessage.error ? 'error' : ''}`}>{formMessage.text}</p> : null}
-          {!paired && !extension.isPending ? <p className="form-message error">扩展未配对，命令无法下发。</p> : null}
-        </div>
-      </div>
-    </section>
+      <CaptureJobsSheet />
+    </div>
   )
 }
 
@@ -293,6 +166,9 @@ function HomePage({ isOnline }: { isOnline: boolean }) {
   )
 }
 
+/** 卡片即页面主体的路由：不渲染全局页头。 */
+const PLAIN_PAGES = new Set(['/screening', '/capture', '/jobs'])
+
 export function App() {
   const route = useCurrentRoute()
   const [theme, setTheme] = useState<Theme>(() => resolveTheme(window.localStorage.getItem('jobos.theme')))
@@ -328,13 +204,18 @@ export function App() {
 
         <div className="mobile-readonly" role="note">窄屏为只读模式，请在桌面端完成编辑或确认。</div>
 
-        <div className="page-grid">
+        <div className={`page-grid${PLAIN_PAGES.has(route.path) ? ' no-context-rail' : ''}`}>
           <main id="workspace" className="page-content">
-            <header className="page-heading">
-              <p className="mono-label">{route.eyebrow}</p><h1>{route.title}</h1><p>{route.description}</p>
-            </header>
+            {PLAIN_PAGES.has(route.path) ? null : (
+              <header className="page-heading">
+                <p className="mono-label">{route.eyebrow}</p><h1>{route.title}</h1><p>{route.description}</p>
+              </header>
+            )}
             {route.path === '/' ? <HomePage isOnline={isOnline} /> : null}
             {route.path === '/capture' ? <CapturePage /> : null}
+            {route.path === '/jobs' ? <JobsPage /> : null}
+            {route.path === '/screening' ? <ScreeningPage /> : null}
+            {route.path === '/shortlist' ? <CandidatesPage /> : null}
             {route.path === '/settings' ? <SettingsPage theme={theme} onThemeChange={setTheme} /> : null}
             {route.emptyTitle ? <EmptyState route={route} /> : null}
           </main>
