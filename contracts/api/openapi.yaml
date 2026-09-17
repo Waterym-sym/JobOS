@@ -1,19 +1,21 @@
 openapi: 3.1.0
 info:
-  title: AI Resume OS / JobOS Local API
+  title: AI Resume OS / JobOS API
   version: 1.0.0
   x-status: v1
   x-doc: docs/architecture/13-API接口设计.md
   description: >
-    本地单机 REST 骨架（核心路径；全量 CRUD 于 P0 补齐，勿当完整 API）。
-    仅绑定 127.0.0.1；鉴权为本地配对 token（Bearer），无 OAuth/RLS。
-    WebSocket（扩展专用）契约见 ../ws/，不在本文件。
+    现有本机采集 REST 路径继续使用配对 token，且仅限 loopback。
+    多用户目标的 /auth、/me 路径使用服务端会话 Cookie；公网部署尚未获准。
+    扩展 WebSocket 契约见 ../ws/，不在本文件。
 servers:
   - url: http://127.0.0.1:8000/api/v1
     description: 本机 Docker Compose
 security:
   - pairingToken: []
 tags:
+  - name: auth
+  - name: account
   - name: extension
   - name: capture
   - name: screening
@@ -25,6 +27,11 @@ tags:
   - name: template
 components:
   securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: jobos_session
+      description: 服务端会话；写请求同时验证 CSRF 与 Origin
     pairingToken:
       type: http
       scheme: bearer
@@ -45,6 +52,47 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    Account:
+      type: object
+      required: [id, email, role, is_admin, display_name]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [seeker, recruiter] }
+        is_admin: { type: boolean }
+        display_name: { type: string }
+    AuthCredentials:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 12 }
+    InviteRegistration:
+      type: object
+      additionalProperties: false
+      required: [email, password, invite_token]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 12 }
+        invite_token: { type: string }
+        display_name: { type: string, maxLength: 80 }
+    AccountProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        display_name: { type: string, maxLength: 80 }
+        basic: { type: object }
+        education: { type: object }
+        job_preference: { type: object }
+        onboarding_step: { type: string, enum: [entry, basic, education, job-preference, complete] }
+    ResumeImport:
+      type: object
+      required: [id, filename, status]
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        status: { type: string, enum: [stored, parsing, parsed, failed] }
     Error:
       type: object
       required: [code, message, trace_id]
@@ -77,6 +125,16 @@ components:
             - EXTENSION_OFFLINE
             - SCREENING_ENTRY_NOT_FOUND
             - SCREENING_TRANSITION_INVALID
+            - AUTH_REQUIRED
+            - AUTH_INVALID
+            - AUTH_RATE_LIMITED
+            - CSRF_INVALID
+            - INVITE_INVALID
+            - INVITE_EXPIRED
+            - ACCOUNT_FORBIDDEN
+            - ACCOUNT_LAST_ADMIN
+            - RESOURCE_NOT_OWNED
+            - RESUME_FILE_INVALID
         message: { type: string }
         trace_id: { type: string }
         details: { type: object }
@@ -427,6 +485,134 @@ components:
         source: { type: string, enum: [builtin, docx_import, user_copy] }
         quality_grade: { type: string, enum: [A, B, C] }
 paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      security: []
+      summary: 用管理员一次性邀请注册求职者或招聘者
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteRegistration' }
+      responses:
+        '201': { description: 注册成功，不自动登录 }
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: 邮箱密码登录并设置服务端会话 Cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthCredentials' }
+      responses:
+        '200': { description: 返回账号与 CSRF 凭据，设置 HttpOnly 会话 Cookie }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      security: [{ sessionCookie: [] }]
+      summary: 撤销当前会话
+      responses:
+        '204': { description: 已撤销 }
+  /auth/session-check:
+    post:
+      tags: [auth]
+      security: [{ sessionCookie: [] }]
+      summary: Web 代理在本机采集写请求前验证管理员会话、Origin 与 CSRF
+      responses:
+        '200': { description: 已验证当前管理员会话 }
+        '403': { $ref: '#/components/responses/Error' }
+  /auth/invitations:
+    post:
+      tags: [auth]
+      security: [{ sessionCookie: [] }]
+      summary: 管理员签发一次性邀请，令牌仅响应一次
+      responses:
+        '201': { description: 邀请已签发 }
+        '403': { $ref: '#/components/responses/Error' }
+  /auth/password-resets:
+    post:
+      tags: [auth]
+      security: [{ sessionCookie: [] }]
+      summary: 管理员签发一次性密码重置凭据
+      responses:
+        '201': { description: 重置凭据仅响应一次 }
+        '403': { $ref: '#/components/responses/Error' }
+  /auth/password-reset:
+    post:
+      tags: [auth]
+      security: []
+      summary: 消耗重置凭据并撤销该账号已有会话
+      responses:
+        '204': { description: 密码已重置 }
+        '400': { $ref: '#/components/responses/Error' }
+  /me:
+    get:
+      tags: [account]
+      security: [{ sessionCookie: [] }]
+      summary: 当前认证账号
+      responses:
+        '200':
+          description: 当前账号
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '401': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [account]
+      security: [{ sessionCookie: [] }]
+      summary: 注销并删除本人私有数据；最后管理员不得注销
+      responses:
+        '204': { description: 删除完成并撤销所有会话 }
+        '409': { $ref: '#/components/responses/Error' }
+  /me/profile:
+    get:
+      tags: [account]
+      security: [{ sessionCookie: [] }]
+      summary: 读取本人资料与入门进度
+      responses:
+        '200':
+          description: 个人资料
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountProfile' }
+    put:
+      tags: [account]
+      security: [{ sessionCookie: [] }]
+      summary: 保存本人资料与入门进度
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountProfile' }
+      responses:
+        '200': { description: 已保存 }
+  /me/resumes:
+    post:
+      tags: [account]
+      security: [{ sessionCookie: [] }]
+      summary: 私有保存 PDF/DOCX 原件，保存不代表解析完成
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: 已保存原件
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResumeImport' }
+        '400': { $ref: '#/components/responses/Error' }
   /extension/status:
     get:
       tags: [extension]

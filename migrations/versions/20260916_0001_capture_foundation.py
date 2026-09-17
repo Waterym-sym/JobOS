@@ -165,4 +165,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("JobOS migrations are forward-only")
+    op.drop_table("ws_event_inbox")
+    op.drop_index("idx_rawjob_fingerprint", table_name="raw_job")
+    op.drop_index("idx_rawjob_active_at", table_name="raw_job")
+    op.drop_table("raw_job")
+    op.drop_table("batch_run")
+    op.drop_table("capture_source")
+    bind = op.get_bind()
+    salary_unit.drop(bind, checkfirst=True)
+    batch_status.drop(bind, checkfirst=True)
+    capture_kind.drop(bind, checkfirst=True)

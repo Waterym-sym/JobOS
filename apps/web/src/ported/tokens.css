@@ -1,0 +1,28 @@
+.login-page, .account-settings-page, .onboarding-root, .recruiter-home {
+  --color-primary: #0db26b;
+  --color-primary-hover: #0a9a5c;
+  --color-primary-light: #e8f8f0;
+  --color-main-bg: #fff;
+  --color-text: #1d2129;
+  --color-text-secondary: #86909c;
+  --color-text-tertiary: #c9cdd4;
+  --color-border: #e5e6eb;
+  --color-border-light: #f2f3f5;
+  --shadow-md: 0 4px 16px rgba(29, 33, 41, .08);
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--color-text);
+}
+.login-page button, .account-settings-page button, .onboarding-root button {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.login-page button:focus-visible, .account-settings-page button:focus-visible,
+.onboarding-root button:focus-visible, .login-page input:focus-visible,
+.onboarding-root input:focus-visible { outline: 2px solid #0db26b; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .login-page *, .account-settings-page *, .onboarding-root * {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

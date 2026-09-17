@@ -75,4 +75,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("JobOS migrations are forward-only")
+    op.drop_index("uq_shortlist_confirmed_raw_job", table_name="shortlist")
+    op.drop_table("shortlist")
+    shortlist_status.drop(op.get_bind(), checkfirst=True)

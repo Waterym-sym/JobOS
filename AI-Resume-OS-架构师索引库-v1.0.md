@@ -4,8 +4,10 @@
 > 基线：`AI Resume OS / JobOS 系统设计与技术架构方案 v1.1`（总体文件名保留 v1.0）。
 > 读者：架构师、产品负责人、前后端、AI/算法、测试、运维及 AI Coding Agent。
 > 使用方式：先按问题检索本库，再进入对应专题、契约、ADR 与代码模块。
-> 更新日期：2026-09-15（v1.1：与 24 篇专题 + `contracts/` 契约对账，条目全部挂真实链接，新增 SCREEN/CONTRACT/RETRO/AIAGENT 四条）。
+> 更新日期：2026-09-18（原 v1.1 基线保留；新增待人审的多用户目标索引 `ARCH-SEC-003` / ADR-013）。
 > 文件名沿用 v1.0 仅为路径稳定，内容以文内版本为准。
+
+> **目标/现状区分**：2026-09-18 本人批准转向公网多用户，但 [ADR-013](docs/architecture/decisions/ADR-013-多用户与公网入口.md) 仍待独立人审；以下 v1.1 单用户/loopback 条目描述当前实现和历史验收基线，不构成公网代码已实现或可部署的声明。
 
 ---
 
@@ -46,6 +48,7 @@ flowchart LR
 | 新增业务功能 | `ARCH-BIZ-001`、`ARCH-MOD-001` | 领域边界、写模型、领域事件、验收指标 |
 | 新增或修改 API | `ARCH-API-001`、`ARCH-CONTRACT-001` | OpenAPI、幂等、错误码映射、审计、契约测试 |
 | 新增数据库表/字段 | `ARCH-DATA-001`、`ARCH-CONTRACT-001` | 数据分层、所有权、Alembic 迁移、索引、PII 等级 |
+| 新增账号、角色或公网入口 | `ARCH-SEC-003`、`ARCH-SEC-001`、`ARCH-CONTRACT-001` | ADR-013 人审、服务端身份、跨账号隔离、公开/本机边界 |
 | 跨模块调用 | `ARCH-MOD-002` | 同步接口或领域事件；禁止跨域直接写库 |
 | 长耗时或 AI 任务 | `ARCH-WF-001` | Workflow、Worker、重试、超时、成本上限 |
 | 浏览器扩展采集/填充/聊天解码 | `ARCH-EXT-001`、`ARCH-API-002` | WS 契约、幂等 upsert、限速、风控暂停 |
@@ -81,6 +84,7 @@ flowchart LR
 | Stage-0、Filter Set、规则引擎、捞回、活跃度 | `ARCH-SCREEN-001` |
 | ATS、解析率、关键词、时间线 | `ARCH-ATS-001` |
 | PII、聊天、protobuf 解码、脱敏、加密 | `ARCH-SEC-002`、`ARCH-EXT-001` |
+| 多用户、邀请注册、会话、owner、跨账号访问 | `ARCH-SEC-003`、`ARCH-DATA-001` |
 | Metrics、Trace、Audit、漏斗对账 | `ARCH-OBS-001` |
 | Docker Compose、loopback、备份恢复 | `ARCH-DEP-001` |
 | 模板、Blueprint、DOCX 导入、渠道隔离 | `ARCH-TPL-001` |
@@ -94,7 +98,7 @@ flowchart LR
 
 ### 2.1 系统形态
 
-当前采用“本机模块化单体 + 独立异步 Worker（含渲染 Worker）+ PostgreSQL/pgvector + Redis + 浏览器扩展”的形态。所有入站服务仅监听 `127.0.0.1`，没有多租户、Kubernetes、公共云入站和自动外发能力。详见总体方案 §4 与专题 17。
+当前采用“本机模块化单体 + 独立异步 Worker（含渲染 Worker）+ PostgreSQL/pgvector + Redis + 浏览器扩展”的形态。现有入站服务仅监听 `127.0.0.1`，没有已实现的多用户或公网入站能力。目标中的公网 Web 边缘与用户隔离见待人审 [ADR-013](docs/architecture/decisions/ADR-013-多用户与公网入口.md)；自动外发仍禁止。详见总体方案 §4 与专题 17。
 
 ### 2.2 领域索引
 
@@ -341,13 +345,22 @@ flowchart LR
 - 复盘引用聊天上下文时走本机模型或脱敏侧；复盘产物本身是 Inferred/Confirmed 混合，不得作为新事实证据。
 - 参考：[18-监控与运维方案](docs/architecture/18-监控与运维方案.md)、[03-业务流程设计](docs/architecture/03-业务流程设计.md)、[12-数据库设计](docs/architecture/12-数据库设计.md)；ADR-008。
 
-### ARCH-SEC-001｜本地信任边界
+### ARCH-SEC-001｜现有本地信任边界
 
 - API、WS、数据库管理入口仅绑定 `127.0.0.1`；拒绝非 loopback 来源与不允许的 Origin。
 - 扩展首次人工配对；token 最小权限、可撤销、可轮换，不入仓库、镜像和日志。
 - 前端/扩展不持有模型供应商 Key；Worker 只获取任务所需秘密；聊天 KEK 本机文件 600 权限。
 - URL/文件解析防路径穿越、SSRF、压缩包炸弹与超大文件；DOCX/图片来自本机或用户显式提供。
 - 参考：[17-部署架构](docs/architecture/17-部署架构.md)、[21-浏览器扩展集成协议](docs/architecture/21-浏览器扩展集成协议.md) §2/§9。
+
+### ARCH-SEC-003｜多用户身份、归属与公网边缘（proposed）
+
+- 场景：2026-09-18 本人批准的多用户目标；编码前需 [ADR-013](docs/architecture/decisions/ADR-013-多用户与公网入口.md) 独立人工 Review。
+- 身份：邮箱密码 + 管理员一次性邀请；求职者/招聘者为业务角色，管理员为治理权限；首个管理员只能在服务器端引导。
+- 边界：仅经 TLS、服务端会话、CSRF/Origin 校验的 Web 入口可公开；API/WS 扩展端、数据库、Redis、Worker 与管理接口不直接公开；扩展/聊天回采仍本机独立。
+- 数据：用户拥有的行、缓存、文件、后台任务由认证主体确定归属；旧数据审计后归首个管理员，跨账号读写零成功；不可信客户端 owner 标识。
+- 迁移与恢复：先契约再 Alembic；upgrade/downgrade 隔离库往返，不兼容的多用户降级必须拒绝；注销删除个人数据并撤销会话，最后管理员先移交权限。
+- 参考：[ADR-013](docs/architecture/decisions/ADR-013-多用户与公网入口.md)、[P1-007 评审任务](docs/delivery/tasks/P1-007-multiuser-architecture-gate.md)、[20-风险与验收标准](docs/architecture/20-风险与验收标准.md)。
 
 ### ARCH-SEC-002｜PII 与聊天数据
 
@@ -571,6 +584,7 @@ red_lines: [<本任务相关 AGENTS 条目>]
 | ADR-010 | 模板只承载呈现 | `ARCH-TPL-001`、`ARCH-GOV-001` | 总体 §2 |
 | ADR-011 | DOCX 仅默认使用开源解析 | `ARCH-TPL-001` | 总体 §2 |
 | ADR-012 | 聊天网络解码为主、DOM 为辅 | `ARCH-API-002`、`ARCH-OPS-001` | 总体 §2 |
+| ADR-013（proposed） | 多用户身份隔离与公网 Web 入口 | `ARCH-SEC-003`、`ARCH-SEC-001` | [独立 ADR](docs/architecture/decisions/ADR-013-多用户与公网入口.md) |
 
 ## 10. 架构治理节奏
 

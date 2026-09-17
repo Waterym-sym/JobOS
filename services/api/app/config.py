@@ -1,7 +1,7 @@
 from ipaddress import ip_address
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://jobos:jobos@127.0.0.1:5432/jobos"
     storage_dir: Path = Path("./data")
     chat_to_third_party: bool = False
+    public_mode: bool = False
+    web_origin: str = "http://127.0.0.1:4173"
+    session_cookie_secure: bool = False
 
     @field_validator("host_bind")
     @classmethod
@@ -34,6 +37,12 @@ class Settings(BaseSettings):
         if not ip_address(value).is_loopback:
             raise ValueError("HOST_BIND must be a loopback address")
         return value
+
+    @model_validator(mode="after")
+    def require_secure_public_edge(self) -> "Settings":
+        if self.public_mode:
+            raise ValueError("PUBLIC_MODE remains disabled until all legacy data paths have account isolation and security review")
+        return self
 
 
 def get_settings() -> Settings:

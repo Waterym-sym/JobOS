@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -9,76 +9,158 @@ import {
 import { fetchHealth } from './lib/health'
 import { CaptureJobsSheet, JobsPage } from './pages_jobs'
 import { CandidatesPage, ScreeningPage } from './pages_screening'
-import { flowRoutes, resolveRoute, utilityRoutes, type AppRoute } from './routes'
-import { applyTheme, resolveTheme, themes, type Theme } from './theme'
+import { flowRoutes, resolveRoute, settingsRoutes, type AppRoute } from './routes'
+import { resolveTheme, themes, type Theme } from './theme'
+import { AgentChatPage } from './pages_agent'
+import { getMe, getProfile, logout, type Account } from './lib/account'
+import { AccountLoginPage, AccountSettings } from './pages_account'
+import {
+  applyTheme,
+  renderSettingsPage,
+  ThemeControl,
+} from './pages_settings'
+
+const OnboardingFlow = lazy(() => import('./pages_onboarding'))
+
+/* ----------------------------------------------------------- helpers */
 
 function useCurrentRoute(): AppRoute {
   const [route, setRoute] = useState(() => resolveRoute(window.location.hash))
-
   useEffect(() => {
     const updateRoute = () => setRoute(resolveRoute(window.location.hash))
     window.addEventListener('hashchange', updateRoute)
     return () => window.removeEventListener('hashchange', updateRoute)
   }, [])
-
   return route
 }
 
-function NavigationItem({ route, currentPath }: { route: AppRoute; currentPath: string }) {
-  const isCurrent = route.path === currentPath
-  return (
-    <a className={`nav-item ${isCurrent ? 'active' : ''}`} href={`#${route.path}`} aria-current={isCurrent ? 'page' : undefined}>
-      <span className="nav-node" aria-hidden="true" />
-      <span className="nav-label">{route.label}</span>
-      <span className="nav-short" aria-hidden="true">{route.shortLabel}</span>
-    </a>
-  )
+function go(path: string) {
+  window.location.hash = path
 }
 
-function EmptyState({ route }: { route: AppRoute }) {
-  return (
-    <div className="empty-state">
-      <span className="empty-rule" aria-hidden="true" />
-      <h2>{route.emptyTitle}</h2>
-      <p>{route.emptyDescription}</p>
-      {route.nextPath && route.nextLabel ? <a className="text-action" href={`#${route.nextPath}`}>{route.nextLabel}</a> : null}
-    </div>
-  )
-}
+/* ----------------------------------------------------------- Sidebar */
 
-/** 单个扩展角色（列表采集桥 / 岗位池补全桥）的在线状态丸。 */
-function BridgePill({
-  label,
-  online,
-  version,
-  checking,
+function Sidebar({
+  currentPath,
+  nickname,
+  onLogout,
 }: {
-  label: string
-  online: boolean
-  version?: string
-  checking: boolean
+  currentPath: string
+  nickname: string
+  onLogout: () => void
 }) {
-  const text = checking
-    ? `${label}检查中`
-    : online
-      ? `${label} v${version ?? ''}`
-      : `${label}未连接`
-  return (
-    <span
-      className={`status-pill ${online ? 'confirmed' : ''}`}
-      title={
-        online
-          ? `${label}已连接（v${version ?? '未知版本'}）`
-          : `${label}未连接：MV3 扩展休眠重连时会短暂出现；若持续如此请在 chrome://extensions 检查对应扩展`
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false)
       }
-    >
-      <span aria-hidden="true">{online ? '●' : '○'}</span>
-      {text}
-    </span>
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar__header">
+        <div className="sidebar__brand">
+          <span className="sidebar__brand-mark" aria-hidden="true">JO</span>
+          <span className="sidebar__brand-text">JobOS</span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="sidebar__new-chat"
+        onClick={() => go('/')}
+      >
+        <span aria-hidden="true">＋</span>
+        <span>新建对话</span>
+      </button>
+
+      <nav className="sidebar__nav" aria-label="求职流程">
+        {flowRoutes.map((item) => {
+          const isActive =
+            item.path === '/'
+              ? currentPath === '/'
+              : currentPath === item.path
+          return (
+            <button
+              key={item.path}
+              type="button"
+              className={`sidebar__nav-item ${isActive ? 'sidebar__nav-item--active' : ''}`}
+              onClick={() => go(item.path)}
+            >
+              <span className="sidebar__nav-label">{item.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      <div className="sidebar__history">
+        <span className="sidebar__history-label">历史对话</span>
+        <ul className="sidebar__history-list">
+          <li>
+            <span className="sidebar__history-empty">暂无会话</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="sidebar__footer" ref={settingsRef}>
+        <button
+          type="button"
+          className={`sidebar__settings-btn ${settingsOpen ? 'sidebar__settings-btn--open' : ''}`}
+          onClick={() => setSettingsOpen((v) => !v)}
+          aria-expanded={settingsOpen}
+          aria-haspopup="true"
+        >
+          <span className="sidebar__avatar" aria-hidden="true">
+            {nickname.slice(0, 1)}
+          </span>
+          <span className="sidebar__username">{nickname}</span>
+          <span className="sidebar__chev" aria-hidden="true">▾</span>
+        </button>
+
+        {settingsOpen ? (
+          <div className="sidebar__settings-menu" role="menu">
+            <div className="sidebar__settings-group-label">设置</div>
+            {settingsRoutes.map((item) => (
+              <button
+                key={item.path}
+                type="button"
+                role="menuitem"
+                className="sidebar__settings-item"
+                onClick={() => {
+                  go(item.path)
+                  setSettingsOpen(false)
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+            <div className="sidebar__settings-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className="sidebar__settings-item sidebar__settings-item--danger"
+              onClick={() => {
+                setSettingsOpen(false)
+                onLogout()
+              }}
+            >
+              退出登录
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </aside>
   )
 }
 
-/** 采集中心：扩展配对状态（标题栏右侧）+ 列表 JSON 导入按钮（状态丸左侧）；岗位列表在下一张卡。 */
+/* ----------------------------------------------------------- Capture */
+
 function CapturePage() {
   const queryClient = useQueryClient()
   const extension = useQuery({
@@ -113,10 +195,19 @@ function CapturePage() {
     importMutation.mutate(file)
   }
 
-  // 两类扩展分开显示：list_bridge 负责翻页直传，pool_bridge 负责入池后的补全。
   const instances = extension.data?.instances ?? []
   const listBridge = [...instances].reverse().find((item) => item.role === 'list_bridge')
   const poolBridge = [...instances].reverse().find((item) => item.role === 'pool_bridge')
+
+  const pill = (label: string, online: boolean, version?: string) => (
+    <span
+      className={`status-pill ${online ? 'confirmed' : ''}`}
+      title={online ? `${label}已连接（v${version ?? '未知版本'}）` : `${label}未连接`}
+    >
+      <span aria-hidden="true">{online ? '●' : '○'}</span>
+      {extension.isPending ? `${label}检查中` : online ? `${label} v${version ?? ''}` : `${label}未连接`}
+    </span>
+  )
 
   return (
     <div className="sheet-stack">
@@ -136,22 +227,12 @@ function CapturePage() {
               className="primary-action"
               onClick={() => inputRef.current?.click()}
               disabled={importMutation.isPending}
-              title="导入扩展导出的岗位列表 JSON（≤5MB，≤500 条）；重复导入按 (source, ext_id) 幂等合并"
+              title="导入扩展导出的岗位列表 JSON"
             >
               {importMutation.isPending ? '导入中…' : '选择文件导入'}
             </button>
-            <BridgePill
-              label="采集扩展"
-              online={Boolean(listBridge)}
-              version={listBridge?.extension_version}
-              checking={extension.isPending}
-            />
-            <BridgePill
-              label="补全桥"
-              online={Boolean(poolBridge)}
-              version={poolBridge?.extension_version}
-              checking={extension.isPending}
-            />
+            {pill('采集扩展', Boolean(listBridge), listBridge?.extension_version)}
+            {pill('补全桥', Boolean(poolBridge), poolBridge?.extension_version)}
           </div>
         </div>
         {message ? (
@@ -160,119 +241,109 @@ function CapturePage() {
           </div>
         ) : null}
       </section>
-
       <CaptureJobsSheet />
     </div>
   )
 }
 
-function ThemeControl({ theme, onChange }: { theme: Theme; onChange: (theme: Theme) => void }) {
+function EmptyState({ route }: { route: AppRoute }) {
   return (
-    <label className="theme-control">
-      <span>主题</span>
-      <select value={theme} onChange={(event) => onChange(resolveTheme(event.target.value))}>
-        {themes.map((item) => <option key={item} value={item}>{item}</option>)}
-      </select>
-    </label>
+    <div className="empty-state">
+      <span className="empty-rule" aria-hidden="true" />
+      <h2>{route.emptyTitle}</h2>
+      <p>{route.emptyDescription}</p>
+    </div>
   )
 }
 
-function SettingsPage({ theme, onThemeChange }: { theme: Theme; onThemeChange: (theme: Theme) => void }) {
-  return (
-    <section className="sheet" aria-labelledby="settings-heading">
-      <div className="sheet-heading">
-        <div><p className="mono-label">READ-ONLY BASELINE</p><h2 id="settings-heading">当前安全基线</h2></div>
-        <span className="status-pill neutral"><span aria-hidden="true">○</span>只读</span>
-      </div>
-      <dl className="status-table settings-table">
-        <div><dt>界面主题</dt><dd><ThemeControl theme={theme} onChange={onThemeChange} /></dd></div>
-        <div><dt>采集间隔下限</dt><dd><code>1800 ms</code></dd></div>
-        <div><dt>采集并发</dt><dd><code>1</code></dd></div>
-        <div><dt>模型密钥</dt><dd>不进入前端，状态接口尚未接入</dd></div>
-        <div><dt>备份</dt><dd>尚无可用状态源</dd></div>
-      </dl>
-      <div className="notice"><strong>设置暂不可编辑。</strong><span>后续必须通过受校验的本机 API 保存，不能在浏览器中绕过下限。</span></div>
-    </section>
-  )
-}
-
-function HomePage({ isOnline }: { isOnline: boolean }) {
-  return (
-    <section className="desk-list" aria-labelledby="desk-heading">
-      <div className="desk-header"><p className="mono-label">NEXT SAFE STEP</p><h2 id="desk-heading">建立本机连接</h2></div>
-      <div className="desk-row">
-        <span className={`evidence-symbol ${isOnline ? 'confirmed' : ''}`} aria-hidden="true">{isOnline ? '●' : '○'}</span>
-        <div><strong>{isOnline ? '本机 API 已就绪' : '本机 API 尚未连接'}</strong><p>检查扩展配对状态后，再进入任何采集工作。</p></div>
-        <a className="primary-action" href="#/capture">查看扩展接入</a>
-      </div>
-    </section>
-  )
-}
-
-/** 卡片即页面主体的路由：不渲染全局页头。 */
-const PLAIN_PAGES = new Set(['/screening', '/capture', '/jobs'])
+/* ----------------------------------------------------------- App shell */
 
 export function App() {
-  const route = useCurrentRoute()
   const [theme, setTheme] = useState<Theme>(() => resolveTheme(window.localStorage.getItem('jobos.theme')))
+  const queryClient = useQueryClient()
+  const [accountError, setAccountError] = useState('')
+  const route = useCurrentRoute()
+  const accountQuery = useQuery({ queryKey: ['me'], queryFn: getMe, retry: false })
+  const account = accountQuery.data
+  const profileQuery = useQuery({ queryKey: ['profile', account?.id], queryFn: getProfile,
+    enabled: account?.role === 'seeker', retry: false })
   const health = useQuery({ queryKey: ['health'], queryFn: ({ signal }) => fetchHealth(signal) })
   const isOnline = health.data?.status === 'ok'
 
   useEffect(() => applyTheme(theme), [theme])
 
+  if (accountQuery.isPending) return <div className="account-loading">正在验证账号…</div>
+  if (!account) return <AccountLoginPage onLogin={(signedIn) => {
+    queryClient.setQueryData(['me'], signedIn)
+    window.location.hash = '/'
+  }} />
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      queryClient.clear()
+      queryClient.setQueryData(['me'], null)
+      window.location.hash = '/login'
+    } catch {
+      setAccountError('退出失败，请检查连接后重试。')
+    }
+  }
+
+  if (account.role === 'recruiter') return <div className="recruiter-workbench">
+    <div className="recruiter-workbench__header"><strong>JobOS · 招聘者工作台</strong>
+      <button type="button" onClick={() => void handleLogout()}>退出登录</button></div>
+    <div className="recruiter-workbench__body">{accountError ? <p role="alert">{accountError}</p> : null}<h1>欢迎，{account.display_name}</h1>
+      <p>招聘业务流程尚未开放。此工作台与求职者数据和流程隔离。</p>
+      <AccountSettings account={account} onAccountChange={(next: Account) => { queryClient.setQueryData<Account>(['me'], next) }}
+        onLogout={() => { queryClient.clear(); queryClient.setQueryData(['me'], null) }} />
+    </div></div>
+
+  if (profileQuery.isPending) return <div className="account-loading">正在加载个人资料…</div>
+  if (profileQuery.isError) return <div className="account-loading" role="alert">无法加载个人资料，请稍后刷新。</div>
+  if (profileQuery.data?.onboarding_step !== 'complete') return <Suspense fallback={<div className="account-loading">正在载入入门流程…</div>}>
+    <OnboardingFlow onComplete={() => { void queryClient.invalidateQueries({ queryKey: ['profile', account.id] }) }}
+      onBackToLogin={() => { void handleLogout() }} />
+  </Suspense>
+
+  const nickname = account.display_name || account.email
+  const legacyAllowed = account.is_admin
+
+  const isSettings = route.path.startsWith('/settings')
+
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <a className="brand" href="#/" aria-label="JobOS 今日案头">
-          <span className="brand-mark" aria-hidden="true">JO</span><span className="brand-name">JobOS</span>
-        </a>
-        <nav className="funnel-nav" aria-label="求职流程">
-          {flowRoutes.map((item) => <NavigationItem key={item.path} route={item} currentPath={route.path} />)}
-        </nav>
-        <nav className="utility-nav" aria-label="工具与设置">
-          {utilityRoutes.map((item) => <NavigationItem key={item.path} route={item} currentPath={route.path} />)}
-        </nav>
-        <p className="privacy-note"><span aria-hidden="true">●</span>数据留在本机</p>
-      </aside>
+      <Sidebar
+        currentPath={route.path}
+        nickname={nickname}
+        onLogout={() => void handleLogout()}
+      />
 
       <div className="work-area">
         <header className="topbar" aria-label="系统状态">
-          <a href="#/capture" className="top-status"><span className={`status-dot ${isOnline ? 'online' : ''}`} aria-hidden="true" /><span>扩展</span><strong>等待状态源</strong></a>
+          <span className="top-status"><span className={`status-dot ${isOnline ? 'online' : ''}`} aria-hidden="true" /><span>API</span><strong>{isOnline ? '正常' : '未连接'}</strong></span>
           <span className="top-status"><span className="mono-label">安全基线</span><strong>≥1800ms · 并发1</strong></span>
           <span className="top-status optional"><span>AI</span><strong>未配置</strong></span>
-          <span className="top-status optional"><span>备份</span><strong>无记录</strong></span>
-          <ThemeControl theme={theme} onChange={setTheme} />
-          <span className={`api-state ${isOnline ? 'online' : ''}`} role="status">{health.isPending ? 'API 检查中' : isOnline ? 'API 正常' : 'API 未连接'}</span>
+          {isSettings ? <ThemeControl theme={theme} onChange={setTheme} /> : null}
         </header>
 
-        <div className="mobile-readonly" role="note">窄屏为只读模式，请在桌面端完成编辑或确认。</div>
-
-        <div className={`page-grid${PLAIN_PAGES.has(route.path) ? ' no-context-rail' : ''}`}>
-          <main id="workspace" className="page-content">
-            {PLAIN_PAGES.has(route.path) ? null : (
-              <header className="page-heading">
-                <p className="mono-label">{route.eyebrow}</p><h1>{route.title}</h1><p>{route.description}</p>
-              </header>
-            )}
-            {route.path === '/' ? <HomePage isOnline={isOnline} /> : null}
-            {route.path === '/capture' ? <CapturePage /> : null}
-            {route.path === '/jobs' ? <JobsPage /> : null}
-            {route.path === '/screening' ? <ScreeningPage /> : null}
-            {route.path === '/shortlist' ? <CandidatesPage /> : null}
-            {route.path === '/settings' ? <SettingsPage theme={theme} onThemeChange={setTheme} /> : null}
-            {route.emptyTitle ? <EmptyState route={route} /> : null}
-          </main>
-
-          <aside className="context-rail" aria-label="当前页面边界">
-            <p className="mono-label">BOUNDARY</p><h2>当前实现边界</h2>
-            <ul className="boundary-list">
-              <li><span>●</span><div><strong>本机运行</strong><p>只读取 loopback 健康状态。</p></div></li>
-              <li><span>◐</span><div><strong>状态待接入</strong><p>无来源的数据不展示数字。</p></div></li>
-              <li><span>○</span><div><strong>无外部动作</strong><p>当前外壳不会访问招聘站点。</p></div></li>
-            </ul>
-            <div className="context-code"><span>route</span><code>{route.path}</code></div>
-          </aside>
-        </div>
+        <main className="page-content">
+          {accountError ? <p role="alert" className="form-message error">{accountError}</p> : null}
+          {route.path === '/settings' ? <AccountSettings account={account}
+            onAccountChange={(next: Account) => { queryClient.setQueryData<Account>(['me'], next) }}
+            onLogout={() => { queryClient.clear(); queryClient.setQueryData(['me'], null) }} /> : null}
+          {!legacyAllowed && route.path !== '/settings' ? <div className="empty-state"><span className="empty-rule" aria-hidden="true" />
+            <h2>此流程暂未开放</h2><p>多用户隔离仍在验收中。你的资料不会进入旧版本机流程。</p></div> : null}
+          {legacyAllowed && route.path === '/' ? <AgentChatPage /> : null}
+          {legacyAllowed && route.path === '/capture' ? <CapturePage /> : null}
+          {legacyAllowed && route.path === '/jobs' ? <JobsPage /> : null}
+          {legacyAllowed && route.path === '/screening' ? <ScreeningPage /> : null}
+          {legacyAllowed && route.path === '/shortlist' ? <CandidatesPage /> : null}
+          {legacyAllowed && route.path === '/packages' && route.emptyTitle ? <EmptyState route={route} /> : null}
+          {legacyAllowed && route.path === '/events' && route.emptyTitle ? <EmptyState route={route} /> : null}
+          {legacyAllowed && route.path === '/retrospective' && route.emptyTitle ? <EmptyState route={route} /> : null}
+          {legacyAllowed && route.path === '/templates' && route.emptyTitle ? <EmptyState route={route} /> : null}
+          {legacyAllowed && isSettings && route.path !== '/settings' ? renderSettingsPage(route.path, theme, setTheme) : null}
+        </main>
       </div>
     </div>
   )

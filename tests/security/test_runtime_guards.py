@@ -31,6 +31,12 @@ def test_risk_limits_cannot_be_relaxed() -> None:
         Settings(capture_concurrency=2, _env_file=None)
 
 
+def test_public_mode_cannot_be_enabled_before_isolation_review() -> None:
+    with pytest.raises(ValidationError, match="PUBLIC_MODE remains disabled"):
+        Settings(public_mode=True, web_origin="https://jobos.example.test",
+                 session_cookie_secure=True, _env_file=None)
+
+
 def test_compose_publishes_only_to_loopback() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     published_lines = [line.strip() for line in compose.splitlines() if "${HOST_BIND" in line]

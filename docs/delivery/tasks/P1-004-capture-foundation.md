@@ -53,7 +53,7 @@ red_lines:
 | 架构检索 | 已核对上述 ARCH/ADR 与 12、20、21、23、24 篇 | 通过 |
 | 机器契约 | API、WS、DB 草案已逐项对账；先更新契约再实现 | 通过 |
 | 数据 owner/PII | `capture_source/batch_run/raw_job/ws_event_inbox` 归 Capture；不含聊天 PII | 通过 |
-| 迁移策略 | 仅 Alembic 前滚迁移；删除自制 SQL runner | 通过 |
+| 迁移策略 | Alembic 是唯一入口；原 0001 仅前滚限制已按本人裁决由 P1-006 补齐 downgrade | 待人审 |
 | 安全策略 | REST 使用 loopback + Bearer；Web 代理服务端注入，浏览器不可见 | 通过 |
 | 人工 Review | DDL、契约、默认配置与扩展命令均为 🟡 | 必须 |
 
@@ -86,6 +86,7 @@ red_lines:
 - 静态质量：ruff 通过；mypy strict 对 19 个 Python 源文件通过；Alembic 离线 SQL 生成通过。
 - Web：12 项测试、TypeScript 检查与生产构建通过；代理服务端注入 token，浏览器 token 获取器扫描为 0。
 - Container：API 与 Web 最终镜像基于 Python 3.12 / Node 20.18.3 成功重建；Compose 配置校验通过。
+- 后续补证（2026-09-17）：P1-006 在隔离 PostgreSQL 16 验证了 0001–0004 的 `base → head → 0001 → base → head`；此处保留原任务当时的测试记录，不等同于 P1 阶段出口通过。
 
 ## 自评清单
 

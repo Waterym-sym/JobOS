@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.api.app import capture_repo, enrich, job_import, raw_jobs_push
+from services.api.app import account_routes, capture_repo, enrich, job_import, raw_jobs_push
 from services.api.app.config import Settings, get_settings
 from services.api.app.errors import ErrorEnvelope
 from services.api.app.pairing import PairingTokenStore
@@ -444,6 +444,8 @@ def register_capture_routes(app: FastAPI) -> None:
 
 
 api_app = build_app("api")
+api_app.add_exception_handler(account_routes.AccountProblem, account_routes.account_problem_handler)
+api_app.include_router(account_routes.router)
 register_capture_routes(api_app)
 gateway_app = build_app("ws-gateway")
 gateway_app.websocket("/ws")(websocket_gateway)

@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import { flowRoutes, resolveRoute, routes, utilityRoutes } from './routes'
+import { flowRoutes, resolveRoute, routes, settingsRoutes } from './routes'
 
 describe('console page map', () => {
-  it('exposes the desk plus every architecture page-map area', () => {
-    expect(routes.map((route) => route.path)).toEqual([
+  it('keeps the funnel routes intact', () => {
+    expect(flowRoutes.map((route) => route.path)).toEqual([
       '/', '/capture', '/jobs', '/screening', '/shortlist', '/packages', '/events',
-      '/retrospective', '/templates', '/knowledge', '/settings',
+      '/retrospective',
     ])
   })
 
-  it('keeps the funnel separate from utility pages', () => {
-    // 页面地图随 P1-005 把「岗位池与筛选」拆为「岗位池」+「筛选池」（8 级）。
-    expect(flowRoutes).toHaveLength(8)
-    expect(utilityRoutes.map((route) => route.path)).toEqual(['/templates', '/knowledge', '/settings'])
+  it('exposes the settings group with all sub-pages', () => {
+    expect(settingsRoutes.map((route) => route.path)).toEqual([
+      '/settings', '/settings/model', '/settings/local', '/settings/extension',
+      '/settings/theme', '/settings/knowledge', '/settings/resume', '/settings/privacy',
+    ])
+  })
+
+  it('includes the login route', () => {
+    expect(routes.some((route) => route.path === '/login')).toBe(true)
   })
 
   it('resolves direct hash routes and safely falls back to the desk', () => {
@@ -21,6 +26,11 @@ describe('console page map', () => {
     expect(resolveRoute('#/screening').path).toBe('/screening')
     expect(resolveRoute('#/jobs?view=rejected').path).toBe('/jobs')
     expect(resolveRoute('#/unknown').path).toBe('/')
+  })
+
+  it('resolves settings sub-paths back to the account settings hub', () => {
+    expect(resolveRoute('#/settings/model').path).toBe('/settings/model')
+    expect(resolveRoute('#/settings/unknown-sub').path).toBe('/settings')
   })
 
   it('does not provide a direct package-creation action outside the shortlist', () => {

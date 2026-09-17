@@ -1,6 +1,6 @@
 # contracts/ — 机器可读契约
 
-> 状态：**P0 已评审冻结**（2026-09-15）。WS 与 REST 核心骨架为 `v1`；数据库草案、Workflow DSL 与 Filter Set 仍按各阶段 DoR 保持 `v0-draft`。
+> 状态：WS 与 REST 核心契约标为 `v1`；其路径/形状已随 P1 切片扩展。数据库 skeleton、Workflow DSL 与 Filter Set 仍是阶段性草案；可执行 DDL 只在 Alembic。当前实现及人审状态见[项目状态快照](../docs/delivery/06-项目状态快照.md)。
 
 ## 真源规则
 
@@ -19,8 +19,8 @@
 | `ws/events.schema.json` | 7 个扩展→服务端事件 | 21 篇 §4 |
 | `ws/raw-job.schema.json` | 列表/详情两档岗位数据契约 | 21 篇 §5 |
 | `ws/chat-event.schema.json` | 聊天回采消息与草稿分类 | 21 篇 §6 |
-| `api/openapi.yaml` | REST 核心路径骨架（全量 CRUD 于 P0 补齐） | 13 篇 |
-| `db/0001_baseline.skeleton.sql` | 16 张新表 PG16 DDL 草案（P1 落 Alembic） | 12 篇 |
+| `api/openapi.yaml` | REST v1 核心路径；同时包含已实现与后续阶段规划路径，不能仅凭出现于契约判断已上线 | 13 篇 |
+| `db/0001_baseline.skeleton.sql` | PG16 比对草案，非可执行迁移；实际 revision 见 `migrations/versions/` | 12 篇 |
 | `dsl/workflow.schema.json` | Workflow DSL 与静态门禁 | 15 篇 |
 | `filters/filter-set.schema.json` | Stage-0 筛选规则 rule_json（八组） | 8 篇 |
 

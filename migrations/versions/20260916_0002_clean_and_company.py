@@ -67,4 +67,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("JobOS migrations are forward-only")
+    op.drop_table("raw_company")
+    op.drop_column("raw_job", "degree_code")
+    op.drop_column("raw_job", "exp_max_years")
+    op.drop_column("raw_job", "exp_min_years")
+    op.drop_column("raw_job", "district")
+    # list_url, boss_name and company_desc belong to 0001; preserve them.

@@ -43,7 +43,7 @@ red_lines:
 | 架构检索 | 已核对 ARCH-SCREEN-001、ARCH-MATCH-001、ARCH-GOV-002、ARCH-RETRO-001 与 01、12、14、20、21、23、24 篇 | 通过 |
 | 机器契约 | `contracts/api/openapi.yaml` 先改（错误码、ScreeningEntryItem、4 个端点），再实现 | 通过 |
 | 数据 owner/PII | `screening_entry` 归 Screening；只引用 `raw_job` 主键，不含聊天 PII | 通过 |
-| 迁移策略 | 仅 Alembic 前滚 `20260917_0004`；不修改 baseline 骨架 | 通过 |
+| 迁移策略 | Alembic 唯一入口；0004 的 downgrade 由 P1-006 补齐并在隔离库往返验证；不修改 baseline 骨架 | 待人审 |
 | 安全策略 | 新端点沿用 loopback + Bearer；无新对外动作；只有人工 POST 可推进候选 | 通过 |
 | 人工 Review | DDL、契约、页面地图、DESIGN.md、错误码均为 🟡 | 必须 |
 

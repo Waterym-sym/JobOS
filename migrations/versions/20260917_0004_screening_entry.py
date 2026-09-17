@@ -72,4 +72,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("JobOS migrations are forward-only")
+    op.drop_index("ix_screening_entry_status_entered", table_name="screening_entry")
+    op.drop_table("screening_entry")
+    screening_entry_status.drop(op.get_bind(), checkfirst=True)
