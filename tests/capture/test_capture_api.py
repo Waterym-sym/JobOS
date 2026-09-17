@@ -45,6 +45,8 @@ class FakeRepo:
         self.pool_rows: list[dict[str, Any]] = []
         self.company_ids: set[str] = set()
         self.entries: dict[UUID, dict[str, Any]] = {}
+        self.upserted: list[dict[str, Any]] = []
+        self._upserted_ext_ids: set[str] = set()
 
     async def create_batch_run(self, **kwargs: Any) -> UUID:
         return CAPTURE_ID
@@ -66,6 +68,15 @@ class FakeRepo:
         record = {"capture_id": capture_id, **kwargs}
         self.completed.append(record)
         return kwargs.get("stats") or {}
+
+    async def upsert_raw_job(self, job: Any) -> bool:
+        self.upserted.append(
+            {"ext_id": job.ext_id, "tier": job.tier, "batch_id": job.batch_id}
+        )
+        if job.ext_id in self._upserted_ext_ids:
+            return False
+        self._upserted_ext_ids.add(job.ext_id)
+        return True
 
     async def get_job_profile(self, ext_id: str, source: str = "boss") -> dict[str, Any] | None:
         return self.profiles.get(ext_id)
@@ -109,6 +120,7 @@ def wired(monkeypatch: pytest.MonkeyPatch) -> tuple[FakeRegistry, FakeRepo]:
     monkeypatch.setattr(repo_mod, "create_batch_run", fake_repo.create_batch_run)
     monkeypatch.setattr(repo_mod, "get_batch", fake_repo.get_batch)
     monkeypatch.setattr(repo_mod, "complete_batch", fake_repo.complete_batch)
+    monkeypatch.setattr(repo_mod, "upsert_raw_job", fake_repo.upsert_raw_job)
     monkeypatch.setattr(repo_mod, "get_job_profile", fake_repo.get_job_profile)
     monkeypatch.setattr(repo_mod, "get_company_by_ext_id", fake_repo.get_company_by_ext_id)
     monkeypatch.setattr(repo_mod, "list_shortlist", fake_repo.list_shortlist)
@@ -347,6 +359,163 @@ def test_job_profile_unknown_ext_id_returns_404(
 
     assert response.status_code == 404
     assert response.json()["code"] == "JOB_NOT_FOUND"
+
+
+# ------------------------------------------------- extension list direct push
+
+
+def pushed_job(ext_id: str, **overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "source": "boss",
+        "ext_id": ext_id,
+        "tier": "list",
+        "title": f"直传岗位 {ext_id}",
+        "company": "直传科技有限公司",
+        "salary_text": "15-25K",
+        "list_json": {"encryptJobId": ext_id, "jobName": f"直传岗位 {ext_id}"},
+        "captured_at": NOW.isoformat(),
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_post_raw_jobs_ingests_passively_without_dispatching_commands(
+    wired: tuple[FakeRegistry, FakeRepo],
+) -> None:
+    fake_registry, fake_repo = wired
+
+    response = TestClient(api_app, client=("127.0.0.1", 50000)).post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={
+            "source": "boss",
+            "tier": "list",
+            "jobs": [pushed_job("push-0001"), pushed_job("push-0002")],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "batch_id": str(CAPTURE_ID),
+        "total": 2,
+        "created": 2,
+        "merged": 0,
+        "invalid": [],
+    }
+    assert [row["ext_id"] for row in fake_repo.upserted] == ["push-0001", "push-0002"]
+    assert all(row["batch_id"] == CAPTURE_ID for row in fake_repo.upserted)
+    assert fake_repo.completed[0]["status"] == "completed"
+    # Red line: list direct push is passive ingestion; it must never dispatch
+    # capture_list/capture_details or any other extension command.
+    assert fake_registry.commands == []
+
+
+def test_post_raw_jobs_repeated_push_reports_merged(
+    wired: tuple[FakeRegistry, FakeRepo],
+) -> None:
+    client = TestClient(api_app, client=("127.0.0.1", 50000))
+    envelope = {"source": "boss", "tier": "list", "jobs": [pushed_job("push-0001")]}
+
+    first = client.post("/api/v1/raw-jobs", headers=AUTH, json=envelope)
+    second = client.post("/api/v1/raw-jobs", headers=AUTH, json=envelope)
+
+    assert first.json()["created"] == 1
+    assert second.json() == {
+        "batch_id": str(CAPTURE_ID),
+        "total": 1,
+        "created": 0,
+        "merged": 1,
+        "invalid": [],
+    }
+
+
+def test_post_raw_jobs_reports_invalid_items_without_aborting(
+    wired: tuple[FakeRegistry, FakeRepo],
+) -> None:
+    _fake_registry, fake_repo = wired
+
+    response = TestClient(api_app, client=("127.0.0.1", 50000)).post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={
+            "source": "boss",
+            "tier": "list",
+            "jobs": [
+                pushed_job("push-0001", title=""),
+                {"source": "boss", "ext_id": "push-0002", "tier": "detail"},
+                pushed_job("push-0003"),
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["created"] == 1
+    assert [entry["index"] for entry in body["invalid"]] == [0, 1]
+    assert [row["ext_id"] for row in fake_repo.upserted] == ["push-0003"]
+
+
+def test_post_raw_jobs_rejects_bad_envelope(
+    wired: tuple[FakeRegistry, FakeRepo],
+) -> None:
+    fake_registry, fake_repo = wired
+    client = TestClient(api_app, client=("127.0.0.1", 50000))
+
+    empty_jobs = client.post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={"source": "boss", "tier": "list", "jobs": []},
+    )
+    assert empty_jobs.status_code == 422
+    assert empty_jobs.json()["code"] == "PAYLOAD_INVALID"
+
+    wrong_tier = client.post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={"source": "boss", "tier": "detail", "jobs": [pushed_job("push-0001")]},
+    )
+    assert wrong_tier.status_code == 422
+
+    extra_field = client.post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={
+            "source": "boss",
+            "tier": "list",
+            "jobs": [pushed_job("push-0001")],
+            "extra": 1,
+        },
+    )
+    assert extra_field.status_code == 422
+
+    oversized = client.post(
+        "/api/v1/raw-jobs",
+        headers=AUTH,
+        json={
+            "source": "boss",
+            "tier": "list",
+            "jobs": [pushed_job(f"push-{i:04d}") for i in range(101)],
+        },
+    )
+    assert oversized.status_code == 422
+
+    # Rejected envelopes ingest nothing and still dispatch no commands.
+    assert fake_repo.upserted == []
+    assert fake_registry.commands == []
+
+
+def test_post_raw_jobs_requires_pairing_token(
+    wired: tuple[FakeRegistry, FakeRepo],
+) -> None:
+    response = TestClient(api_app, client=("127.0.0.1", 50000)).post(
+        "/api/v1/raw-jobs",
+        json={"source": "boss", "tier": "list", "jobs": [pushed_job("push-0001")]},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "PAIRING_TOKEN_INVALID"
 
 
 # ------------------------------------------------------- pool state derivation

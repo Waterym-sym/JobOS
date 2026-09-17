@@ -258,8 +258,7 @@ function JobsTable({
                 return (
                   <tr
                     key={job.id}
-                    className={`selectable${selectedExtId === job.ext_id ? ' selected' : ''}`}
-                    onClick={() => onSelect(job.ext_id)}
+                    className={selectedExtId === job.ext_id ? 'selected' : undefined}
                   >
                     <td>{job.title ?? '—'}</td>
                     <td>{job.company ?? '—'}</td>
@@ -269,18 +268,27 @@ function JobsTable({
                     <td>{degreeDisplay(job)}</td>
                     <td>{pooled ? <EnrichBadge state={pooled.enrich_state} /> : <span className="form-message">未入池</span>}</td>
                     <td>
-                      {pooled ? (
-                        <span className="tag-micro">已入池</span>
-                      ) : (
+                      <div className="row-actions">
+                        {pooled ? (
+                          <span className="tag-micro">已入池</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ghost btn-sm"
+                            onClick={() => onAdd(job.ext_id)}
+                            disabled={addingExtId === job.ext_id}
+                          >
+                            {addingExtId === job.ext_id ? '入池中…' : '加入岗位池'}
+                          </button>
+                        )}
                         <button
                           type="button"
-                          className="ghost"
-                          onClick={() => onAdd(job.ext_id)}
-                          disabled={addingExtId === job.ext_id}
+                          className="ghost btn-sm"
+                          onClick={() => onSelect(job.ext_id)}
                         >
-                          {addingExtId === job.ext_id ? '入池中…' : '加入岗位池'}
+                          查看
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -288,7 +296,7 @@ function JobsTable({
             </tbody>
           </table>
           <p className="form-message">
-            显示 {filtered.length} / {jobs.length} 条（列表上限 200 条，按时间倒序）。点击任意行在右侧查看 JD 全文与公司画像。
+            显示 {filtered.length} / {jobs.length} 条（列表上限 200 条，按时间倒序）。点击操作列的「查看」在右侧查看 JD 全文与公司画像。
           </p>
         </>
       )}

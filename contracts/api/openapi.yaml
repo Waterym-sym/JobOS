@@ -240,6 +240,87 @@ components:
             properties:
               index: { type: integer, minimum: 0 }
               reason: { type: string }
+    RawJobUploadItem:
+      type: object
+      additionalProperties: false
+      description: >
+        列表档原始岗位载荷，字段形状与 contracts/ws/raw-job.schema.json（tier=list）一致；
+        扩展只做字段名归一化，薪资等解析在服务端完成。title/company 空串在运行时按无效条拒收。
+      required: [source, ext_id, tier, title, company]
+      properties:
+        source: { type: string, const: boss }
+        ext_id: { type: string, minLength: 1 }
+        tier: { type: string, const: list }
+        batch_id:
+          type: [string, 'null']
+          format: uuid
+          description: 直传由服务端盖本次溯源批次，客户端无需传
+        fingerprint: { type: string }
+        list_url: { type: string }
+        title: { type: string }
+        company: { type: string }
+        city: { type: string }
+        district: { type: string }
+        salary_text: { type: string }
+        low_salary: { type: [number, 'null'] }
+        high_salary: { type: [number, 'null'] }
+        salary_unit:
+          type: string
+          enum: [month_K, month_yuan, day, hour, year, unknown]
+        exp_text: { type: string }
+        degree: { type: string }
+        list_tags: { type: array, items: { type: string } }
+        boss_name: { type: [string, 'null'] }
+        jd_text: { type: string }
+        skill_tags: { type: array, items: { type: string } }
+        industry: { type: string }
+        stage: { type: string }
+        scale: { type: string }
+        address: { type: string }
+        company_desc: { type: string }
+        active_time: { type: string }
+        active_at: { type: [string, 'null'], format: date-time }
+        ats_direct_post: { type: boolean }
+        boss_json: { type: object }
+        list_json:
+          type: object
+          description: 列表卡片完整原始 JSON（页面 Vue 内存对象原样保留，仅存本机）
+        detail_json: { type: object }
+        captured_at: { type: string, format: date-time }
+    RawJobsUpload:
+      type: object
+      additionalProperties: false
+      description: >
+        扩展翻页列表直传信封（用户每手动翻一页一次 POST）。
+        被动幂等入库：服务端不登记采集批次、不下发任何 WS 采集命令、不触发页面动作。
+      required: [source, tier, jobs]
+      properties:
+        source: { type: string, const: boss }
+        tier: { type: string, const: list }
+        jobs:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RawJobUploadItem' }
+    RawJobsUploadResult:
+      type: object
+      required: [batch_id, total, created, merged, invalid]
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+          description: 服务端溯源批次（batch_run.kind=list, trigger=extension-list-push）
+        total: { type: integer, minimum: 0 }
+        created: { type: integer, minimum: 0 }
+        merged: { type: integer, minimum: 0 }
+        invalid:
+          type: array
+          items:
+            type: object
+            required: [index, reason]
+            properties:
+              index: { type: integer, minimum: 0 }
+              reason: { type: string }
     ScreeningEntryItem:
       type: object
       required: [id, raw_job_id, ext_id, status, entered_at]
@@ -398,6 +479,28 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/RawJobSummary' } }
                   limit: { type: integer }
                   offset: { type: integer }
+    post:
+      tags: [capture]
+      summary: 扩展翻页列表直传（被动幂等 upsert；不登记采集批次、不下发任何采集命令）
+      description: >
+        扩展在用户手动翻页后，把当前页 Vue 内存中的列表卡片（仅字段名归一化）一次性直传。
+        服务端按 (source, ext_id) 幂等合并：重发同页为 merged，list_json 保留首次值，
+        薪资/经验/学历由服务端解析。逐条校验失败计入 invalid，不中断整批；
+        本端点是纯被动入库，永远不会向扩展回发 capture_list/capture_details 等命令。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RawJobsUpload' }
+      responses:
+        '200':
+          description: 入库完成（含逐条无效报告）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RawJobsUploadResult' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /raw-jobs/{ext_id}:
     get:
       tags: [capture]

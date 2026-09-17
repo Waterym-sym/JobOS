@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.api.app import capture_repo, enrich, job_import
+from services.api.app import capture_repo, enrich, job_import, raw_jobs_push
 from services.api.app.config import Settings, get_settings
 from services.api.app.errors import ErrorEnvelope
 from services.api.app.pairing import PairingTokenStore
@@ -48,6 +48,18 @@ class ShortlistCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ext_id: str = Field(min_length=1)
     note: str | None = Field(default=None, max_length=500)
+
+
+class RawJobsUpload(BaseModel):
+    """扩展翻页列表直传信封（contracts/ws/raw-job.schema.json 的 list 档）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["boss"]
+    tier: Literal["list"]
+    jobs: list[dict[str, Any]] = Field(
+        min_length=1, max_length=raw_jobs_push.MAX_JOBS
+    )
 
 
 class ApiProblem(Exception):
@@ -273,6 +285,14 @@ def register_capture_routes(app: FastAPI) -> None:
             limit=safe_limit, offset=safe_offset, batch_id=batch_id
         )
         return {"items": items, "limit": safe_limit, "offset": safe_offset}
+
+    @router.post("/raw-jobs", tags=["capture"])
+    async def upload_raw_jobs(body: RawJobsUpload) -> dict[str, Any]:
+        """扩展翻页列表直传：被动幂等入库，不登记采集、不下发任何 WS 命令。"""
+        try:
+            return await raw_jobs_push.run_push(body.model_dump())
+        except raw_jobs_push.RawJobsUploadError as exc:
+            raise ApiProblem(422, "PAYLOAD_INVALID", str(exc)) from exc
 
     @router.get("/raw-jobs/{ext_id}", tags=["capture"])
     async def read_job_profile(ext_id: str) -> dict[str, Any]:
