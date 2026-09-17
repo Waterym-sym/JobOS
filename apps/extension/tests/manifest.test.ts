@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 type Manifest = {
+  name?: string
+  version?: string
   manifest_version: number
   permissions?: string[]
   host_permissions?: string[]
@@ -15,8 +17,18 @@ type Manifest = {
 const manifest = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../public/manifest.json'), 'utf8'),
 ) as Manifest
+const pkg = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf8'),
+) as { version: string }
 
 describe('extension manifest safety baseline', () => {
+  it('identifies itself as the pool bridge so the two loaded extensions are distinguishable', () => {
+    // The list bridge is the external boss-helper; chrome://extensions must show
+    // a visibly different name/version for this pool enrich bridge.
+    expect(manifest.name).toBe('JobOS 岗位池补全桥')
+    expect(manifest.version).toBe(pkg.version)
+  })
+
   it('limits site access to BOSS pages only', () => {
     expect(manifest.manifest_version).toBe(3)
     // Site access is exactly the BOSS host: no <all_urls>, no wildcards.

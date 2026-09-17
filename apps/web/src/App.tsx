@@ -46,6 +46,38 @@ function EmptyState({ route }: { route: AppRoute }) {
   )
 }
 
+/** 单个扩展角色（列表采集桥 / 岗位池补全桥）的在线状态丸。 */
+function BridgePill({
+  label,
+  online,
+  version,
+  checking,
+}: {
+  label: string
+  online: boolean
+  version?: string
+  checking: boolean
+}) {
+  const text = checking
+    ? `${label}检查中`
+    : online
+      ? `${label} v${version ?? ''}`
+      : `${label}未连接`
+  return (
+    <span
+      className={`status-pill ${online ? 'confirmed' : ''}`}
+      title={
+        online
+          ? `${label}已连接（v${version ?? '未知版本'}）`
+          : `${label}未连接：MV3 扩展休眠重连时会短暂出现；若持续如此请在 chrome://extensions 检查对应扩展`
+      }
+    >
+      <span aria-hidden="true">{online ? '●' : '○'}</span>
+      {text}
+    </span>
+  )
+}
+
 /** 采集中心：扩展配对状态（标题栏右侧）+ 列表 JSON 导入按钮（状态丸左侧）；岗位列表在下一张卡。 */
 function CapturePage() {
   const queryClient = useQueryClient()
@@ -81,7 +113,10 @@ function CapturePage() {
     importMutation.mutate(file)
   }
 
-  const paired = extension.data?.paired === true
+  // 两类扩展分开显示：list_bridge 负责翻页直传，pool_bridge 负责入池后的补全。
+  const instances = extension.data?.instances ?? []
+  const listBridge = [...instances].reverse().find((item) => item.role === 'list_bridge')
+  const poolBridge = [...instances].reverse().find((item) => item.role === 'pool_bridge')
 
   return (
     <div className="sheet-stack">
@@ -105,10 +140,18 @@ function CapturePage() {
             >
               {importMutation.isPending ? '导入中…' : '选择文件导入'}
             </button>
-            <span className={`status-pill ${paired ? 'confirmed' : ''}`}>
-              <span aria-hidden="true">{paired ? '●' : '○'}</span>
-              {extension.isPending ? '检查中' : paired ? '扩展已配对' : '扩展未接入'}
-            </span>
+            <BridgePill
+              label="采集扩展"
+              online={Boolean(listBridge)}
+              version={listBridge?.extension_version}
+              checking={extension.isPending}
+            />
+            <BridgePill
+              label="补全桥"
+              online={Boolean(poolBridge)}
+              version={poolBridge?.extension_version}
+              checking={extension.isPending}
+            />
           </div>
         </div>
         {message ? (

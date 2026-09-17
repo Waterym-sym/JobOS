@@ -6,6 +6,7 @@ Skipped by default. Run inside the compose network with RUN_DB_TESTS=1.
 import asyncio
 import os
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 
@@ -17,6 +18,7 @@ pytestmark = pytest.mark.skipif(
 async def _scenario() -> None:
     from services.api.app.capture_repo import (
         create_batch_run,
+        create_screening_entry,
         list_companies,
         list_raw_jobs,
         upsert_company,
@@ -62,6 +64,9 @@ async def _scenario() -> None:
 
         items = await list_raw_jobs(limit=10)
         row = next(i for i in items if i["ext_id"] == "clean-1")
+        # Before the enrich funnel the screening marker must stay absent, so
+        # the capture center keeps offering "加入岗位池".
+        assert row["screening_status"] is None
         assert row["title"] == "数据工程师"
         assert row["company"] == "乙公司"
         assert row["city"] == "杭州"
@@ -103,6 +108,14 @@ async def _scenario() -> None:
         assert comp["sections"]["talent"] == "双通道晋升"
         assert comp["sections"]["benefits"] == "六险一金"
         assert comp["sections"]["business"] == {"legal": "乙公司"}
+
+        # --- once the job flowed into screening the list marker flips, and the
+        # capture center must stop offering a second pool entry for it
+        assert await create_screening_entry(UUID(row["id"])) is True
+        flowed = next(
+            i for i in await list_raw_jobs(limit=10) if i["ext_id"] == "clean-1"
+        )
+        assert flowed["screening_status"] == "screened"
     finally:
         await close_pool()
 

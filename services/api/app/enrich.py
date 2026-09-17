@@ -34,6 +34,11 @@ PENDING_PREVIEW = 200
 
 _COMPANY_URL_RE = re.compile(r"/gongsi/([^/]+)\.html")
 _COMPANY_HOST_PREFIX = "https://www.zhipin.com/"
+# BOSS encrypt ids used in self-constructed company URLs are opaque tokens;
+# only this shape may be interpolated into a path (flat cards carry no URL).
+_COMPANY_ID_RE = re.compile(r"[A-Za-z0-9_.~-]+")
+# securityId query values are long url-safe tokens; anything else is dropped.
+_SECURITY_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 # The pool worker is demand-driven: each entry gets exactly one detail attempt
 # and one company attempt. A failure is recorded and the entry leaves the queue
@@ -195,10 +200,20 @@ def _blocked_reason(*, has_work: bool) -> str | None:
         if not registry.capable(capability)
     ]
     if missing:
+        required_cap = {
+            "capture_details": "capture_details_urls",
+            "capture_company": "capture_company",
+        }
+        reconnecting = all(registry.was_capable(required_cap[name]) for name in missing)
+        if reconnecting:
+            return (
+                "岗位池补全桥正在重连（浏览器扩展休眠后会自动恢复）："
+                "队列已挂起，补全桥重连后自动继续，无需操作"
+            )
         return (
             "当前配对的客户端不具备按 URL 补全的能力（"
             + "、".join(missing)
-            + "）：请在 Chrome 加载/重载本仓库的 JobOS Local Bridge 扩展"
+            + "）：请在 Chrome 加载/重载「JobOS 岗位池补全桥」扩展"
         )
     return None
 
@@ -460,22 +475,46 @@ async def _inter_stage_delay() -> None:
 
 
 def _navigation(list_json: Any) -> dict[str, str | None]:
-    """Extract detail/company navigation from the preserved exporter item."""
+    """Extract detail/company navigation from preserved list data.
+
+    Two shapes occur: the exporter envelope (console JSON import — fields
+    nested under ``raw`` plus top-level link fields) and the flat Vue card
+    delivered by extension list direct-push (every field at top level, with
+    no link fields; links are constructed from the site-provided encrypt ids).
+    """
     item = list_json if isinstance(list_json, dict) else {}
     raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
-    encrypt_job_id = _text(raw.get("encryptJobId")) or _text(item.get("jobId"))
-    security_id = _text(item.get("securityId")) or _text(raw.get("securityId"))
+
+    company_url_input: str | None = None
+    if raw:
+        encrypt_job_id = _text(raw.get("encryptJobId")) or _text(item.get("jobId"))
+        security_id = _text(item.get("securityId")) or _text(raw.get("securityId"))
+        company_url_input = _text(item.get("companyUrl"))
+        ext_company_id = _text(raw.get("encryptBrandId"))
+    else:
+        # Flat Vue card: mapListJob preserves the card object verbatim. Ids
+        # interpolated into self-built URLs must be opaque BOSS tokens.
+        job_id = _text(item.get("encryptJobId"))
+        encrypt_job_id = job_id if (job_id and _COMPANY_ID_RE.fullmatch(job_id)) else None
+        sec_id = _text(item.get("securityId"))
+        security_id = sec_id if (sec_id and _SECURITY_ID_RE.fullmatch(sec_id)) else None
+        brand_id = _text(item.get("encryptBrandId"))
+        ext_company_id = brand_id if (brand_id and _COMPANY_ID_RE.fullmatch(brand_id)) else None
+
     detail_url = None
     if encrypt_job_id:
         detail_url = f"https://www.zhipin.com/job_detail/{encrypt_job_id}.html"
         if security_id:
             detail_url = f"{detail_url}?securityId={security_id}"
 
-    company_url = _text(item.get("companyUrl"))
-    if company_url and not company_url.startswith(_COMPANY_HOST_PREFIX):
-        # Red line: only BOSS company pages may be navigated to.
-        company_url = None
-    ext_company_id = _text(raw.get("encryptBrandId"))
+    company_url = None
+    if company_url_input and company_url_input.startswith(_COMPANY_HOST_PREFIX):
+        # Red line: exporter-supplied links must point at BOSS company pages.
+        company_url = company_url_input
+    elif not raw and ext_company_id and _COMPANY_ID_RE.fullmatch(ext_company_id):
+        # Flat cards carry no URL; build the canonical BOSS company page from
+        # a constant host plus the validated opaque id.
+        company_url = f"{_COMPANY_HOST_PREFIX}gongsi/{ext_company_id}.html"
     if not ext_company_id and company_url:
         match = _COMPANY_URL_RE.search(company_url)
         ext_company_id = match.group(1) if match else None

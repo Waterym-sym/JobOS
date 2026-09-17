@@ -109,20 +109,31 @@ components:
         detail_limit: { type: integer, minimum: 1, maximum: 100, default: 30 }
         delay_ms: { type: integer, minimum: 1800 }
     ExtensionStatus:
-      oneOf:
-        - type: object
-          additionalProperties: false
-          required: [paired]
-          properties: { paired: { const: false } }
-        - type: object
-          additionalProperties: false
-          required: [paired, instance_id, extension_version, protocol_version, connected_at]
-          properties:
-            paired: { const: true }
-            instance_id: { type: string, format: uuid }
-            extension_version: { type: string }
-            protocol_version: { type: integer }
-            connected_at: { type: string, format: date-time }
+      type: object
+      additionalProperties: false
+      required: [paired, instances]
+      description: >-
+        全部已配对扩展实例的连接视图。role 区分两类客户端：
+        list_bridge=列表采集桥（外部 boss-helper，直传 REST），
+        pool_bridge=岗位池补全桥（本仓库 JobOS 扩展，按 URL 抓详情/公司页）。
+        MV3 service worker 重连期间实例会短暂消失，消费方应按“重连中”而非故障呈现。
+      properties:
+        paired: { type: boolean, description: 任一扩展实例在线即为 true }
+        instances:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [instance_id, role, extension_version, protocol_version, connected_at, capabilities]
+            properties:
+              instance_id: { type: string, format: uuid }
+              role: { type: string, enum: [list_bridge, pool_bridge] }
+              extension_version: { type: string }
+              protocol_version: { type: integer }
+              connected_at: { type: string, format: date-time }
+              capabilities:
+                type: array
+                items: { type: string }
     RawJobSummary:
       type: object
       required: [id, ext_id]
@@ -138,6 +149,11 @@ components:
         list_at: { type: [string, 'null'], format: date-time }
         detail_at: { type: [string, 'null'], format: date-time }
         batch_id: { type: [string, 'null'], format: uuid }
+        # 非空表示详情与公司页均已补全并流入筛选池（screened/candidate/dismissed）；
+        # 采集中心据此不再显示「加入岗位池」。
+        screening_status:
+          type: [string, 'null']
+          enum: [screened, candidate, dismissed, null]
     JobProfile:
       type: object
       required: [job, company]

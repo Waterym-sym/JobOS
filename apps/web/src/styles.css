@@ -200,6 +200,8 @@ code, .mono-label, .context-code, .status-table code { font-family: "JetBrains M
 .enrich-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 12px; }
 .enrich-badge span { font-size: 9px; }
 .enrich-badge.done { color: var(--evidence); }
+.enrich-badge.screened, .enrich-badge.candidate { color: var(--evidence); }
+.enrich-badge.dismissed { color: var(--ink-3); }
 .enrich-badge.pending, .enrich-badge.detail_done { color: var(--hold); }
 .enrich-badge.failed { color: var(--danger); }
 

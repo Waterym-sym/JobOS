@@ -418,8 +418,9 @@ async def list_raw_jobs(
                    r.salary_text, r.low_salary, r.high_salary, r.salary_unit,
                    r.exp_text, r.exp_min_years, r.exp_max_years,
                    r.degree, r.degree_code,
-                   r.list_at, r.detail_at, r.batch_id
+                   r.list_at, r.detail_at, r.batch_id, se.status
               FROM raw_job r
+              LEFT JOIN screening_entry se ON se.raw_job_id = r.id
               {where}
              ORDER BY GREATEST(r.detail_at, r.list_at, r.created_at) DESC
              LIMIT %s OFFSET %s
@@ -447,6 +448,9 @@ async def list_raw_jobs(
             "list_at": row[15].isoformat() if row[15] else None,
             "detail_at": row[16].isoformat() if row[16] else None,
             "batch_id": str(row[17]) if row[17] else None,
+            # Non-null only after both enrich stages completed and the job
+            # flowed into screening (one entry per job; see uq raw_job).
+            "screening_status": row[18],
         }
         for row in rows
     ]

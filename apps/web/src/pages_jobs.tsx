@@ -30,6 +30,9 @@ const ENRICH_LABEL: Record<string, string> = {
   detail_done: '详情已到',
   done: '已补全',
   failed: '补全失败',
+  screened: '已入筛选池',
+  candidate: '已入候选区',
+  dismissed: '已忽略',
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -37,8 +40,15 @@ const STAGE_LABEL: Record<string, string> = {
   company: '公司页',
 }
 
+// 补全完成（详情+公司页）后岗位已离开岗位池、流入后续漏斗，采集中心不再提供入池动作。
+const SCREENING_TAG: Record<string, string> = {
+  screened: '已入筛选池',
+  candidate: '已入候选区',
+  dismissed: '已忽略',
+}
+
 function EnrichBadge({ state }: { state: string }) {
-  const symbol = state === 'done' ? '●' : state === 'detail_done' ? '' : '○'
+  const symbol = state === 'done' || state === 'screened' || state === 'candidate' ? '●' : state === 'detail_done' ? '' : '○'
   return (
     <span className={`enrich-badge ${state}`}>
       <span aria-hidden="true">{symbol}</span>
@@ -181,7 +191,8 @@ function JobsTable({
     const needle = keyword.trim().toLowerCase()
     const salaryFloor = salary && salary !== 'daily' ? Number(salary) : null
     return jobs.filter((job) => {
-      if (hidePooled && poolByExtId.has(job.ext_id)) return false
+      // 「只看未入池」同时隐藏已在池中与已补全流入筛选池的岗位，只剩可操作项。
+      if (hidePooled && (poolByExtId.has(job.ext_id) || job.screening_status)) return false
       if (city && job.city !== city) return false
       if (degree && (job.degree_code ?? '') !== degree) return false
       if (expFilter && expDisplay(job) !== expFilter) return false
@@ -255,6 +266,9 @@ function JobsTable({
             <tbody>
               {filtered.map((job) => {
                 const pooled = poolByExtId.get(job.ext_id)
+                const flowedTag = job.screening_status
+                  ? SCREENING_TAG[job.screening_status] ?? job.screening_status
+                  : null
                 return (
                   <tr
                     key={job.id}
@@ -266,10 +280,20 @@ function JobsTable({
                     <td>{salaryDisplay(job)}</td>
                     <td>{expDisplay(job)}</td>
                     <td>{degreeDisplay(job)}</td>
-                    <td>{pooled ? <EnrichBadge state={pooled.enrich_state} /> : <span className="form-message">未入池</span>}</td>
+                    <td>
+                      {job.screening_status ? (
+                        <EnrichBadge state={job.screening_status} />
+                      ) : pooled ? (
+                        <EnrichBadge state={pooled.enrich_state} />
+                      ) : (
+                        <span className="form-message">未入池</span>
+                      )}
+                    </td>
                     <td>
                       <div className="row-actions">
-                        {pooled ? (
+                        {flowedTag ? (
+                          <span className="tag-micro">{flowedTag}</span>
+                        ) : pooled ? (
                           <span className="tag-micro">已入池</span>
                         ) : (
                           <button

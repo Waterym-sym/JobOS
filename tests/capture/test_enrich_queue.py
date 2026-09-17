@@ -109,6 +109,7 @@ class FakeExtension:
         self.in_flight = 0
         self.peak_in_flight = 0
         self.offline = False
+        self.ever_capable = False
         self.fail_command: str | None = None
         self.connect_subscribers: list[Any] = []
 
@@ -124,6 +125,9 @@ class FakeExtension:
 
     def capable(self, capability: str) -> bool:
         return not self.offline and capability in {"capture_details_urls", "capture_company"}
+
+    def was_capable(self, capability: str) -> bool:
+        return self.ever_capable
 
     async def send_command(
         self, type_: str, payload: dict[str, Any], *, capture_id: UUID | None = None
@@ -256,6 +260,125 @@ def test_navigation_refuses_foreign_company_hosts() -> None:
     )
 
     assert nav["company_url"] is None
+
+
+def test_navigation_builds_urls_from_flat_direct_push_card() -> None:
+    # mapListJob preserves the Vue card verbatim: ids at top level, no raw/links.
+    nav = enrich._navigation(
+        {
+            "encryptJobId": "flatJob0001",
+            "securityId": "flatSecurity0001",
+            "encryptBrandId": "flatBrand0001~",
+            "jobName": "电子工程师",
+        }
+    )
+
+    assert nav["detail_url"] == (
+        "https://www.zhipin.com/job_detail/flatJob0001.html?securityId=flatSecurity0001"
+    )
+    assert nav["security_id"] == "flatSecurity0001"
+    assert nav["company_url"] == "https://www.zhipin.com/gongsi/flatBrand0001~.html"
+    assert nav["ext_company_id"] == "flatBrand0001~"
+
+
+def test_navigation_flat_card_without_brand_has_no_company_link() -> None:
+    nav = enrich._navigation({"encryptJobId": "flatJob0002", "securityId": "s2"})
+
+    assert nav["detail_url"] == "https://www.zhipin.com/job_detail/flatJob0002.html?securityId=s2"
+    assert nav["company_url"] is None
+    assert nav["ext_company_id"] is None
+
+
+def test_navigation_flat_card_without_job_id_has_no_detail_link() -> None:
+    nav = enrich._navigation({"encryptBrandId": "flatBrand0002"})
+
+    assert nav["detail_url"] is None
+    assert nav["company_url"] == "https://www.zhipin.com/gongsi/flatBrand0002.html"
+
+
+def test_navigation_flat_card_rejects_brand_id_with_path_characters() -> None:
+    # A card-derived id must never inject path/query parts into the built URL.
+    nav = enrich._navigation(
+        {"encryptJobId": "j", "encryptBrandId": "x/../../evil"}
+    )
+
+    assert nav["company_url"] is None
+    assert nav["ext_company_id"] is None
+
+
+def test_navigation_flat_card_sanitises_job_and_security_tokens() -> None:
+    nav = enrich._navigation(
+        {"encryptJobId": "j/../x", "securityId": "a&evil=1"}
+    )
+
+    assert nav["detail_url"] is None
+    assert nav["security_id"] is None
+
+
+def test_navigation_envelope_brand_id_never_bypasses_foreign_url_redline() -> None:
+    # Even with a usable brand id, the envelope branch must not construct a
+    # canonical URL when the supplied link points off-host.
+    nav = enrich._navigation(
+        {
+            "jobId": "j1",
+            "companyUrl": "https://evil.example.com/gongsi/b1.html",
+            "raw": {"encryptJobId": "j1", "encryptBrandId": "b1"},
+        }
+    )
+
+    assert nav["company_url"] is None
+
+
+class _BlockedStatusStub:
+    def __init__(self, *, current: Any, capable: bool, was_capable: bool) -> None:
+        self._current = current
+        self._capable = capable
+        self._was_capable = was_capable
+
+    def current(self) -> Any:
+        return self._current
+
+    def capable(self, capability: str) -> bool:
+        return self._capable
+
+    def was_capable(self, capability: str) -> bool:
+        return self._was_capable
+
+
+def test_blocked_reason_is_silent_without_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(enrich, "registry", _BlockedStatusStub(current="x", capable=True, was_capable=True))
+    assert enrich._blocked_reason(has_work=False) is None
+
+
+def test_blocked_reason_reports_unpaired_when_no_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(enrich, "registry", _BlockedStatusStub(current=None, capable=False, was_capable=False))
+    assert "扩展未配对" in enrich._blocked_reason(has_work=True)
+
+
+def test_blocked_reason_guides_install_when_pool_bridge_never_paired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(enrich, "registry", _BlockedStatusStub(current="list", capable=False, was_capable=False))
+    reason = enrich._blocked_reason(has_work=True)
+    assert reason is not None
+    assert "不具备按 URL 补全" in reason
+    assert "岗位池补全桥" in reason
+
+
+def test_blocked_reason_says_reconnecting_when_capability_was_seen_before(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # MV3 sleep gap: list bridge still online, pool bridge momentarily away.
+    monkeypatch.setattr(enrich, "registry", _BlockedStatusStub(current="list", capable=False, was_capable=True))
+    reason = enrich._blocked_reason(has_work=True)
+    assert reason is not None
+    assert "正在重连" in reason
+    assert "自动继续" in reason
+
+
+def test_blocked_reason_is_silent_when_capable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(enrich, "registry", _BlockedStatusStub(current="pool", capable=True, was_capable=True))
+    assert enrich._blocked_reason(has_work=True) is None
 
 
 def test_inter_stage_delay_jitters_upward_only(monkeypatch: pytest.MonkeyPatch) -> None:

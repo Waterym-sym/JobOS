@@ -1,12 +1,18 @@
-export type ExtensionStatus =
-  | { paired: false }
-  | {
-      paired: true
-      instance_id: string
-      extension_version: string
-      protocol_version: number
-      connected_at: string
-    }
+export type ExtensionRole = 'list_bridge' | 'pool_bridge'
+
+export type ExtensionInstance = {
+  instance_id: string
+  role: ExtensionRole
+  extension_version: string
+  protocol_version: number
+  connected_at: string
+  capabilities: string[]
+}
+
+export type ExtensionStatus = {
+  paired: boolean
+  instances: ExtensionInstance[]
+}
 
 export type CaptureRequest = {
   kind: 'list' | 'detail'
@@ -47,6 +53,8 @@ export type RawJobItem = {
   list_at: string | null
   detail_at: string | null
   batch_id: string | null
+  /** 非空＝详情与公司页均已补全并流入筛选池（screened/candidate/dismissed）。 */
+  screening_status: 'screened' | 'candidate' | 'dismissed' | null
 }
 
 export type CompanyItem = {

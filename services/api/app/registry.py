@@ -66,6 +66,10 @@ class ExtensionRegistry:
     def __init__(self) -> None:
         self._instances: dict[str, ExtensionInstance] = {}
         self._connect_subscribers: list[Callable[[], None]] = []
+        # Capabilities any paired instance has ever announced this process:
+        # lets the UI distinguish "pool bridge reconnecting" (seen, now in an
+        # MV3 SW sleep gap) from "pool bridge never installed".
+        self._seen_capabilities: frozenset[str] = frozenset()
 
     def subscribe_connected(self, fn: Callable[[], None]) -> None:
         """Notify when an instance pairs (used to wake capability-gated work)."""
@@ -85,6 +89,7 @@ class ExtensionRegistry:
             with suppress(Exception):
                 await inst.websocket.close(code=1000, reason="reconnected")
         self._instances[instance.instance_id] = instance
+        self._seen_capabilities = self._seen_capabilities | instance.capabilities
         for subscriber in list(self._connect_subscribers):
             try:
                 subscriber()
@@ -128,6 +133,17 @@ class ExtensionRegistry:
         """True when a paired instance announced the capability."""
         return any(capability in instance.capabilities for instance in self._instances.values())
 
+    def was_capable(self, capability: str) -> bool:
+        """True when the capability was announced earlier this process (even
+        if that instance is currently in an MV3 reconnect gap)."""
+        return capability in self._seen_capabilities
+
+    @staticmethod
+    def _role(instance: ExtensionInstance) -> str:
+        # Pool enrich capabilities mark the JobOS bridge; the external list
+        # bridge announces none.
+        return "pool_bridge" if (instance.capabilities & POOL_CAPABILITIES) else "list_bridge"
+
     async def send_command(
         self,
         type_: str,
@@ -155,16 +171,18 @@ class ExtensionRegistry:
         return command_id
 
     def status(self) -> dict[str, Any]:
-        instance = self.current()
-        if instance is None:
-            return {"paired": False}
-        return {
-            "paired": True,
-            "instance_id": instance.instance_id,
-            "extension_version": instance.extension_version,
-            "protocol_version": instance.protocol_version,
-            "connected_at": instance.connected_at.isoformat(),
-        }
+        instances = [
+            {
+                "instance_id": instance.instance_id,
+                "role": self._role(instance),
+                "extension_version": instance.extension_version,
+                "protocol_version": instance.protocol_version,
+                "connected_at": instance.connected_at.isoformat(),
+                "capabilities": sorted(instance.capabilities),
+            }
+            for instance in self._by_age()
+        ]
+        return {"paired": bool(instances), "instances": instances}
 
 
 registry = ExtensionRegistry()

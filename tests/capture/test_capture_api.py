@@ -34,7 +34,7 @@ class FakeRegistry:
         return "command-id"
 
     def status(self) -> dict[str, Any]:
-        return {"paired": False}
+        return {"paired": False, "instances": []}
 
 
 class FakeRepo:
@@ -248,7 +248,7 @@ def test_extension_status_endpoint(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"paired": False}
+    assert response.json() == {"paired": False, "instances": []}
 
 
 def test_capture_api_rejects_missing_token(

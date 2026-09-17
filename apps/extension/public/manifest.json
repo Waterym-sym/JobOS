@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "JobOS Local Bridge",
-  "version": "0.2.2",
-  "description": "Local-only bridge: pool enrich capture from BOSS pages (read-only, human-paced).",
+  "name": "JobOS 岗位池补全桥",
+  "version": "0.3.0",
+  "description": "JobOS 本机桥：岗位池按 URL 补全 BOSS 详情页/公司页（只读、人工节奏）。列表采集请使用 boss-helper 扩展。",
   "permissions": ["storage", "scripting", "tabs", "alarms"],
   "host_permissions": ["https://www.zhipin.com/*"],
   "background": {
@@ -14,6 +14,6 @@
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:8788"
   },
   "action": {
-    "default_title": "JobOS Local Bridge"
+    "default_title": "JobOS 岗位池补全桥"
   }
 }
